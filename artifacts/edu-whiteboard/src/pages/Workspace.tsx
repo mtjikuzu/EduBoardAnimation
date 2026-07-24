@@ -81,7 +81,11 @@ export default function Workspace() {
             )}
           </div>
         </div>
-        <button className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm" data-testid="button-export">
+        <button 
+          onClick={() => setLocation(`/lessons/${id}/export`)}
+          className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm" 
+          data-testid="button-export"
+        >
           Export
         </button>
       </header>

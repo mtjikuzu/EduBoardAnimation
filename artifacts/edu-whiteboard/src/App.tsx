@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import Workspace from '@/pages/Workspace';
+import ExportPage from '@/pages/ExportPage';
 import NotFound from '@/pages/not-found';
 import Dashboard from '@/pages/Dashboard';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
@@ -13,6 +14,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/lessons/:id" component={Workspace} />
+      <Route path="/lessons/:id/export" component={ExportPage} />
       <Route component={NotFound} />
     </Switch>
   );
