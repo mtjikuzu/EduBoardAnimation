@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "EduWhiteboard"
+version = "1.0.0"
+id = "artifacts/edu-whiteboard"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24279
+
+[services.development]
+run = "pnpm --filter @workspace/edu-whiteboard run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/edu-whiteboard", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/edu-whiteboard/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24279"
+BASE_PATH = "/"

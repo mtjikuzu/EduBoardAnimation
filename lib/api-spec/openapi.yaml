@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: EduWhiteboard API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: lessons
+    description: Lesson operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,133 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /lessons:
+    get:
+      operationId: getLessons
+      tags: [lessons]
+      summary: List all lessons
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Search lessons by title
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [in_progress, completed, pending, rendering]
+          description: Filter by status
+      responses:
+        "200":
+          description: List of lessons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lesson"
+    post:
+      operationId: createLesson
+      tags: [lessons]
+      summary: Create a new lesson
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonInput"
+      responses:
+        "201":
+          description: Created lesson
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+
+  /lessons/stats:
+    get:
+      operationId: getLessonStats
+      tags: [lessons]
+      summary: Get lesson statistics
+      responses:
+        "200":
+          description: Lesson statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonStats"
+
+  /lessons/{id}:
+    get:
+      operationId: getLesson
+      tags: [lessons]
+      summary: Get a single lesson
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lesson
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateLesson
+      tags: [lessons]
+      summary: Update a lesson
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonUpdate"
+      responses:
+        "200":
+          description: Updated lesson
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lesson"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteLesson
+      tags: [lessons]
+      summary: Delete a lesson
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +163,110 @@ components:
       required:
         - status
 
+    Lesson:
+      type: object
+      required:
+        - id
+        - title
+        - grade
+        - language
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        grade:
+          type: string
+        language:
+          type: string
+        durationMinutes:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [in_progress, completed, pending, rendering]
+        thumbnailUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    LessonInput:
+      type: object
+      required:
+        - title
+        - grade
+        - language
+      properties:
+        title:
+          type: string
+          minLength: 1
+        grade:
+          type: string
+          minLength: 1
+        language:
+          type: string
+          minLength: 1
+        durationMinutes:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [in_progress, completed, pending, rendering]
+        thumbnailUrl:
+          type: ["string", "null"]
+
+    LessonUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        grade:
+          type: string
+        language:
+          type: string
+        durationMinutes:
+          type: ["integer", "null"]
+        status:
+          type: string
+          enum: [in_progress, completed, pending, rendering]
+        thumbnailUrl:
+          type: ["string", "null"]
+
+    LessonStats:
+      type: object
+      required:
+        - total
+        - byStatus
+      properties:
+        total:
+          type: integer
+        byStatus:
+          type: object
+          properties:
+            in_progress:
+              type: integer
+            completed:
+              type: integer
+            pending:
+              type: integer
+            rendering:
+              type: integer
+          required:
+            - in_progress
+            - completed
+            - pending
+            - rendering
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
