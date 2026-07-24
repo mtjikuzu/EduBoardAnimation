@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { Search, Plus, Image as ImageIcon, Copy, Trash2, Download, ExternalLink, Loader2, X } from 'lucide-react';
 import { 
   useGetLessons, 
@@ -132,6 +133,7 @@ const NewLessonDialog = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
 // Lesson Card Component
 const LessonCard = ({ lesson }: { lesson: any }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const deleteLesson = useDeleteLesson();
   
@@ -174,7 +176,8 @@ const LessonCard = ({ lesson }: { lesson: any }) => {
 
   return (
     <div 
-      className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group relative"
+      className="bg-card border border-border rounded-xl overflow-hidden hover:shadow-md transition-shadow group relative cursor-pointer"
+      onClick={() => setLocation(`/lessons/${lesson.id}`)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       data-testid={`card-lesson-${lesson.id}`}
@@ -188,11 +191,29 @@ const LessonCard = ({ lesson }: { lesson: any }) => {
         
         {isHovered && (
           <div className="absolute inset-0 bg-foreground/60 flex items-center justify-center gap-2 backdrop-blur-sm transition-opacity">
-            <button className="p-2 bg-background rounded-full text-foreground hover:text-primary transition-colors" data-testid={`button-open-${lesson.id}`}><ExternalLink className="w-4 h-4" /></button>
-            <button className="p-2 bg-background rounded-full text-foreground hover:text-primary transition-colors" data-testid={`button-duplicate-${lesson.id}`}><Copy className="w-4 h-4" /></button>
-            <button className="p-2 bg-background rounded-full text-foreground hover:text-primary transition-colors" data-testid={`button-download-${lesson.id}`}><Download className="w-4 h-4" /></button>
             <button 
-              onClick={handleDelete}
+              onClick={(e) => { e.stopPropagation(); setLocation(`/lessons/${lesson.id}`); }} 
+              className="p-2 bg-background rounded-full text-foreground hover:text-primary transition-colors" 
+              data-testid={`button-open-${lesson.id}`}
+            >
+              <ExternalLink className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={(e) => e.stopPropagation()} 
+              className="p-2 bg-background rounded-full text-foreground hover:text-primary transition-colors" 
+              data-testid={`button-duplicate-${lesson.id}`}
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={(e) => e.stopPropagation()} 
+              className="p-2 bg-background rounded-full text-foreground hover:text-primary transition-colors" 
+              data-testid={`button-download-${lesson.id}`}
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleDelete(); }}
               disabled={deleteLesson.isPending}
               className="p-2 bg-background rounded-full text-foreground hover:text-destructive transition-colors disabled:opacity-50"
               data-testid={`button-delete-${lesson.id}`}
