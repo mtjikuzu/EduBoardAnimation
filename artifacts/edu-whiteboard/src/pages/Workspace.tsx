@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useGetLesson, getGetLessonQueryKey } from '@workspace/api-client-react';
-import { ArrowLeft, ChevronDown, CheckCircle2, Circle, Send, Loader2, ChevronUp } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CheckCircle2, Circle, Send, Loader2, ChevronUp, Plus, FileText } from 'lucide-react';
+import BriefInput from '@/components/BriefInput';
+import StoryboardViewer from '@/components/StoryboardViewer';
+import { generateStoryboard, getStoryboardsByLesson } from '@/lib/api';
+import type { StoryboardResult, Scene, SafetyFlag } from '@/lib/api';
 
 const Logo = () => (
   <div className="flex items-center gap-2">
@@ -16,6 +20,9 @@ export default function Workspace() {
   const params = useParams();
   const id = parseInt(params.id || '0', 10);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [storyboard, setStoryboard] = useState<StoryboardResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: lesson, isLoading, isError } = useGetLesson(id, {
     query: {
@@ -24,16 +31,18 @@ export default function Workspace() {
     }
   });
 
-  const steps = [
-    { id: 1, label: 'Lesson plan created', status: 'done' },
-    { id: 2, label: 'Lesson plan created', status: 'done' },
-    { id: 3, label: 'Generating narration', status: 'done' },
-    { id: 4, label: 'Generating narration', status: 'done' },
-    { id: 5, label: 'Generating narration', status: 'done' },
-    { id: 6, label: 'Generating illustrations', status: 'in-progress' },
-    { id: 7, label: 'Lesson plan created', status: 'pending' },
-    { id: 8, label: 'Generating narration', status: 'pending' },
-  ];
+  const handleGenerate = async (brief: string) => {
+    setError(null);
+    setIsGenerating(true);
+    try {
+      const result = await generateStoryboard(id, brief);
+      setStoryboard(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate storyboard');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   if (isError || (!isLoading && !lesson)) {
     return (
@@ -48,6 +57,8 @@ export default function Workspace() {
       </div>
     );
   }
+
+  const scenes = storyboard?.scenes ?? [];
 
   return (
     <div className="w-screen h-screen bg-background font-sans text-foreground flex flex-col overflow-hidden">
@@ -81,269 +92,191 @@ export default function Workspace() {
             )}
           </div>
         </div>
-        <button 
-          onClick={() => setLocation(`/lessons/${id}/export`)}
-          className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm" 
-          data-testid="button-export"
-        >
-          Export
-        </button>
+        {scenes.length > 0 && (
+          <button 
+            onClick={() => setLocation(`/lessons/${id}/export`)}
+            className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-1.5 rounded-lg text-sm font-medium transition-colors shadow-sm" 
+            data-testid="button-export"
+          >
+            Export
+          </button>
+        )}
       </header>
 
       {/* Main Workspace */}
-      {isDrawing ? (
-        <main className="flex-1 flex flex-col overflow-hidden p-6 gap-6 max-w-[1400px] mx-auto w-full" data-testid="drawing-mode">
-          <div className="flex flex-1 gap-6 overflow-hidden">
-            {/* LEFT CHAT PANEL */}
-            <div className="w-80 shrink-0 flex flex-col">
-              <div className="flex-1 overflow-auto pr-2 relative">
-                {/* Vertical line connecting steps */}
-                <div className="absolute left-[21px] top-6 bottom-12 w-0.5 border-l-2 border-dashed border-border z-0"></div>
-
-                <div className="space-y-4 relative z-10">
-                  {/* Completed steps */}
-                  {[
-                    { id: 1, label: 'Progress', badge: 'Pomt' },
-                    { id: 2, label: 'Aide', badge: 'Pomt' },
-                    { id: 3, label: 'Progress', badge: 'Pomt' }
-                  ].map((step) => (
-                    <div key={step.id} className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 shadow-sm">
-                      <CheckCircle2 className="w-5 h-5 text-[#22C55E] shrink-0 bg-card" />
-                      <span className="text-sm font-medium text-foreground flex-1">{step.label}</span>
-                      <span className="text-[10px] uppercase tracking-wider font-bold bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{step.badge}</span>
-                    </div>
-                  ))}
-
-                  {/* Active Step */}
-                  <div className="bg-foreground border-none rounded-xl p-4 flex flex-col gap-2 shadow-lg transform scale-[1.02] transition-transform">
-                    <div className="flex items-center gap-3">
-                      <div className="w-5 h-5 shrink-0 relative flex items-center justify-center">
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-secondary absolute inset-0 animate-pulse">
-                          <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2"/>
-                          <path d="M10 1V10H19" stroke="currentColor" strokeWidth="2" fill="currentColor"/>
-                        </svg>
-                      </div>
-                      <span className="text-sm font-medium text-background flex-1">Generating illustrations</span>
-                      <span className="text-xs font-bold bg-background/20 text-background px-2 py-0.5 rounded-full">[1]</span>
-                    </div>
-                    <div className="pl-8 text-xs text-secondary font-medium uppercase tracking-widest">
-                      4/8
-                    </div>
-                  </div>
-
-                  {/* Pending steps */}
-                  <div className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 shadow-sm opacity-60">
-                    <Circle className="w-5 h-5 text-muted-foreground shrink-0 bg-card" />
-                    <span className="text-sm font-medium text-muted-foreground flex-1">Future</span>
-                    <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  
-                  <div className="bg-card border border-border rounded-xl p-3 flex items-center gap-3 shadow-sm opacity-40">
-                    <Circle className="w-5 h-5 text-muted-foreground shrink-0 bg-card" />
-                    <span className="text-sm font-medium text-muted-foreground flex-1">Future</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT CANVAS PANEL */}
-            <div className="flex-1 flex flex-col">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 ml-2">Excalidraw</div>
-              <div className="flex-1 bg-card rounded-2xl shadow-sm border border-border relative overflow-hidden flex items-center justify-center">
-                
-                {/* Decorative rough shapes scattered */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-40" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                  <g className="text-muted-foreground">
-                    {/* Top left cluster */}
-                    <path d="M50 50 L80 50 L50 80 L80 80" />
-                    <path d="M120 40 L150 70 M150 40 L120 70" />
-                    <rect x="200" y="40" width="30" height="30" />
-                    
-                    {/* Right cluster */}
-                    <path d="M700 80 L750 80 M740 70 L750 80 L740 90" />
-                    <circle cx="650" cy="100" r="20" />
-                    <path d="M800 150 C 820 120, 850 180, 880 150" />
-
-                    {/* Bottom cluster */}
-                    <path d="M100 400 L100 350 L150 350" />
-                    <path d="M200 400 C 200 370, 240 370, 240 400 C 240 430, 200 430, 200 400" />
-                    <path d="M600 380 L550 380 M560 370 L550 380 L560 390" />
-                    <rect x="750" y="380" width="40" height="40" rx="10" />
-                  </g>
-                </svg>
-
-                <h2 className="font-serif italic text-4xl text-muted-foreground/50 z-10 animate-pulse">
-                  Agent is drawing...
-                </h2>
-              </div>
-            </div>
-          </div>
-
-          {/* BOTTOM TIMELINE */}
-          <div className="h-16 bg-card border border-border rounded-2xl flex items-center px-8 shadow-sm shrink-0">
-            <div className="flex-1 relative flex items-center">
-              {/* Base line */}
-              <div className="absolute left-0 right-0 h-1 bg-muted rounded-full"></div>
-              {/* Progress line */}
-              <div className="absolute left-0 w-[42%] h-1 bg-secondary rounded-full"></div>
-              
-              {/* Dots */}
-              <div className="w-full flex justify-between relative z-10">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((dot) => (
-                  <div key={dot} className="flex flex-col items-center gap-2 transform translate-y-[2px]">
-                    <div className={`w-3 h-3 rounded-full border-2 border-card shadow-sm ${
-                      dot < 4 ? 'bg-secondary' : 
-                      dot === 4 ? 'bg-secondary w-4 h-4 transform -translate-y-0.5' : 
-                      'bg-muted-foreground/30'
-                    }`}></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </main>
-      ) : (
-        <main className="flex-1 flex overflow-hidden" data-testid="normal-mode">
-          
-          {/* LEFT PANEL - AI AGENT (28%) */}
-        <div className="w-[28%] min-w-[300px] border-r border-border bg-card flex flex-col">
+      <main className="flex-1 flex overflow-hidden">
+        {/* LEFT PANEL - Brief / Storyboard */}
+        <div className="w-[35%] min-w-[320px] border-r border-border bg-card flex flex-col">
           <div className="p-4 border-b border-border">
-            <button 
-              onClick={() => setIsDrawing(!isDrawing)}
-              className="bg-secondary hover:opacity-90 text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium w-full flex items-center justify-center gap-2 transition-opacity" 
-              data-testid="button-ai-agent"
-            >
-              <Logo /> AI AGENT
-            </button>
+            <h2 className="font-serif text-lg font-bold text-foreground">
+              {storyboard ? 'Storyboard' : 'Lesson Brief'}
+            </h2>
           </div>
           
-          <div className="flex-1 overflow-auto p-4 space-y-4">
-            {steps.map((step) => (
-              <div key={step.id} className="flex items-start gap-3">
-                <div className="shrink-0 mt-0.5">
-                  {step.status === 'done' && <CheckCircle2 className="w-5 h-5 text-[#22C55E]" />}
-                  {step.status === 'in-progress' && (
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-secondary">
-                      <circle cx="10" cy="10" r="9" stroke="currentColor" strokeWidth="2"/>
-                      <path d="M10 1V10H19" stroke="currentColor" strokeWidth="2" fill="currentColor"/>
-                    </svg>
-                  )}
-                  {step.status === 'pending' && <Circle className="w-5 h-5 text-muted-foreground" />}
-                </div>
-                <span className={`text-sm ${step.status === 'pending' ? 'text-muted-foreground' : 'text-foreground'} ${step.status === 'in-progress' ? 'font-medium' : ''}`}>
-                  {step.label}
-                </span>
+          <div className="flex-1 overflow-auto p-4">
+            {error && (
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+                {error}
               </div>
-            ))}
-          </div>
-          
-          <div className="p-4 border-t border-border bg-card">
-            <div className="relative">
-              <input 
-                type="text" 
-                placeholder="Ask AI agent..." 
-                className="w-full pl-4 pr-10 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:border-secondary transition-colors placeholder:text-muted-foreground text-foreground shadow-sm"
-                data-testid="input-ask-ai"
+            )}
+
+            {!storyboard ? (
+              <BriefInput
+                lessonId={id}
+                lessonTitle={lesson?.title ?? 'Untitled'}
+                onGenerate={handleGenerate}
+                isGenerating={isGenerating}
               />
-              <button className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-secondary hover:bg-muted rounded-lg transition-colors" data-testid="button-send-ai">
-                <Send className="w-4 h-4" />
+            ) : (
+              <StoryboardViewer
+                scenes={scenes}
+                safetyFlags={(storyboard as StoryboardResult).safetyFlags}
+                modelUsed={(storyboard as StoryboardResult).modelUsed}
+                status={(storyboard as StoryboardResult).status}
+              />
+            )}
+          </div>
+
+          {storyboard && (
+            <div className="p-4 border-t border-border">
+              <button
+                onClick={() => setStoryboard(null)}
+                className="w-full bg-secondary hover:opacity-90 text-secondary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-opacity"
+                data-testid="button-new-brief"
+              >
+                <Plus className="w-4 h-4" />
+                New Brief
               </button>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* CENTER PANEL - CANVAS (50%) */}
-        <div className="w-[50%] flex flex-col bg-background">
+        {/* CENTER PANEL - Canvas Preview */}
+        <div className="flex-1 flex flex-col bg-background">
           <div className="flex justify-center p-4">
             <div className="flex p-1 bg-muted rounded-lg">
-              <button className="px-4 py-1.5 rounded-md bg-card text-foreground text-sm font-medium shadow-sm transition-colors">Canvas</button>
-              <button className="px-4 py-1.5 rounded-md text-muted-foreground text-sm font-medium hover:text-foreground transition-colors">Storyboard</button>
-              <button className="px-4 py-1.5 rounded-md text-muted-foreground text-sm font-medium hover:text-foreground transition-colors">Preview</button>
+              <button
+                className={`px-4 py-1.5 rounded-md text-sm font-medium shadow-sm transition-colors ${
+                  isDrawing ? 'bg-card text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setIsDrawing(true)}
+              >
+                Canvas
+              </button>
+              <button
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  !isDrawing ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setIsDrawing(false)}
+              >
+                Preview
+              </button>
             </div>
           </div>
           
           <div className="flex-1 px-8 pb-8 flex flex-col">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Excalidraw</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                {isDrawing ? 'Excalidraw' : 'Scene Preview'}
+              </span>
             </div>
-            <div className="flex-1 bg-card rounded-2xl shadow-sm border border-border overflow-hidden flex items-center justify-center relative p-8">
-              
-              {/* Hand-drawn sketch SVG */}
-              <svg viewBox="0 0 400 300" className="w-full h-full max-w-lg opacity-80" style={{ strokeLinecap: 'round', strokeLinejoin: 'round' }}>
-                {/* Building base */}
-                <path d="M50 250 L350 250 L340 100 L60 100 Z" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                {/* Awning */}
-                <path d="M40 100 L360 100 L380 140 L20 140 Z" fill="none" stroke="currentColor" strokeWidth="3" className="text-secondary"/>
-                <path d="M60 140 L60 160 M120 140 L120 160 M180 140 L180 160 M240 140 L240 160 M300 140 L300 160 M340 140 L340 160" stroke="currentColor" strokeWidth="3" className="text-secondary"/>
-                {/* Door */}
-                <path d="M160 250 L160 170 L240 170 L240 250" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                <circle cx="230" cy="210" r="3" fill="currentColor" className="text-foreground"/>
-                {/* Windows */}
-                <rect x="70" y="170" width="70" height="60" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                <rect x="260" y="170" width="70" height="60" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                {/* Window panes */}
-                <path d="M105 170 L105 230 M70 200 L140 200" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
-                <path d="M295 170 L295 230 M260 200 L330 200" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
-                {/* Sign text */}
-                <text x="200" y="80" textAnchor="middle" className="font-serif font-bold text-2xl fill-current text-foreground">GROCERY SHOP</text>
-                <path d="M100 85 L300 85" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
-              </svg>
-              
-            </div>
+            {scenes.length > 0 && !isDrawing ? (
+              <div className="flex-1 bg-card rounded-2xl shadow-sm border border-border overflow-auto p-6">
+                <div className="space-y-4">
+                  {scenes.map((scene) => (
+                    <div key={scene.id} className="border border-border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Scene {scene.order}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {scene.durationSec}s
+                        </span>
+                      </div>
+                      <p className="text-sm text-foreground font-medium mb-1">{scene.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-3">{scene.narration}</p>
+                      {scene.elements.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {scene.elements.map((el, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 bg-muted rounded text-muted-foreground">
+                              {el.type}: {el.content.slice(0, 30)}{el.content.length > 30 ? '...' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 bg-card rounded-2xl shadow-sm border border-border overflow-hidden flex items-center justify-center relative p-8">
+                <svg viewBox="0 0 400 300" className="w-full h-full max-w-lg opacity-40" style={{ strokeLinecap: 'round', strokeLinejoin: 'round' }}>
+                  <path d="M50 250 L350 250 L340 100 L60 100 Z" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
+                  <path d="M40 100 L360 100 L380 140 L20 140 Z" fill="none" stroke="currentColor" strokeWidth="3" className="text-secondary"/>
+                  <path d="M60 140 L60 160 M120 140 L120 160 M180 140 L180 160 M240 140 L240 160 M300 140 L300 160 M340 140 L340 160" stroke="currentColor" strokeWidth="3" className="text-secondary"/>
+                  <path d="M160 250 L160 170 L240 170 L240 250" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
+                  <circle cx="230" cy="210" r="3" fill="currentColor" className="text-foreground"/>
+                  <rect x="70" y="170" width="70" height="60" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
+                  <rect x="260" y="170" width="70" height="60" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
+                  <path d="M105 170 L105 230 M70 200 L140 200" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
+                  <path d="M295 170 L295 230 M260 200 L330 200" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
+                  <text x="200" y="80" textAnchor="middle" className="font-serif font-bold text-2xl fill-current text-foreground">SCENE PREVIEW</text>
+                </svg>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* RIGHT PANEL - SCENE CARDS (22%) */}
-        <div className="w-[22%] min-w-[240px] border-l border-border bg-card flex flex-col">
+        {/* RIGHT PANEL - Scene timeline / agent controls */}
+        <div className="w-[22%] min-w-[220px] border-l border-border bg-card flex flex-col">
           <div className="p-4 border-b border-border">
             <h3 className="font-serif font-bold text-lg text-foreground">Scenes</h3>
           </div>
-          <div className="flex-1 overflow-auto p-4 space-y-4">
-            
-            {/* Scene 1 */}
-            <div className="border-2 border-transparent rounded-xl overflow-hidden cursor-pointer hover:border-border transition-colors group">
-              <div className="bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground opacity-90 transition-opacity group-hover:opacity-100">Scene 1</div>
-              <div className="h-24 bg-secondary/10 flex items-center justify-center p-4">
-                <svg viewBox="0 0 100 100" className="w-full h-full opacity-50 transition-opacity group-hover:opacity-70" stroke="currentColor" strokeWidth="4" fill="none">
-                  <g className="text-secondary">
-                    <rect x="20" y="40" width="60" height="40" />
-                    <path d="M10 40 L90 40 L50 10 Z" />
-                  </g>
-                </svg>
+          <div className="flex-1 overflow-auto p-4 space-y-3">
+            {scenes.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-8 h-8 text-muted-foreground/50 mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Generate a storyboard to see scenes here</p>
               </div>
-            </div>
-
-            {/* Scene 2 */}
-            <div className="border-2 border-transparent rounded-xl overflow-hidden cursor-pointer hover:border-border transition-colors group">
-              <div className="bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground opacity-90 transition-opacity group-hover:opacity-100">Scene 2</div>
-              <div className="h-24 bg-secondary/10 flex items-center justify-center p-4">
-                <svg viewBox="0 0 100 100" className="w-full h-full opacity-50 transition-opacity group-hover:opacity-70" stroke="currentColor" strokeWidth="4" fill="none">
-                  <g className="text-secondary">
-                    <circle cx="50" cy="50" r="30" />
-                    <path d="M50 20 L50 80 M20 50 L80 50" />
-                  </g>
-                </svg>
-              </div>
-            </div>
-
-            {/* Scene 3 (Active) */}
-            <div className="border-2 border-primary rounded-xl overflow-hidden shadow-sm">
-              <div className="bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground">Scene 3</div>
-              <div className="h-24 bg-primary/10 flex items-center justify-center p-4">
-                <svg viewBox="0 0 100 100" className="w-full h-full opacity-60" stroke="currentColor" strokeWidth="4" fill="none">
-                  <g className="text-primary">
-                    <path d="M20 20 L80 80 M80 20 L20 80" />
-                    <rect x="30" y="30" width="40" height="40" />
-                  </g>
-                </svg>
-              </div>
-            </div>
-
+            ) : (
+              scenes.map((scene) => (
+                <div
+                  key={scene.id}
+                  className="border-2 border-transparent rounded-xl overflow-hidden hover:border-border transition-colors group"
+                  data-testid={`sidebar-scene-${scene.id}`}
+                >
+                  <div className="bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground">
+                    Scene {scene.order}
+                  </div>
+                  <div className="h-20 bg-secondary/5 flex items-center justify-center p-3">
+                    <div className="text-xs text-muted-foreground text-center">
+                      <p className="font-medium text-foreground truncate">{scene.title}</p>
+                      <p className="mt-1">{scene.durationSec}s</p>
+                      <p className="text-[10px] mt-0.5">{scene.elements.length} elements</p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
+          
+          {scenes.length > 0 && (
+            <div className="p-4 border-t border-border">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Ask AI agent..." 
+                  className="w-full pl-4 pr-10 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:border-secondary transition-colors placeholder:text-muted-foreground text-foreground shadow-sm"
+                  data-testid="input-ask-ai"
+                />
+                <button className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-secondary hover:bg-muted rounded-lg transition-colors" data-testid="button-send-ai">
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-
       </main>
-      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import lessonsRouter from "./lessons";
 import creatorsRouter from "./creators";
 import auditRouter from "./audit";
+import storyboardsRouter from "./storyboards";
 
 const router: IRouter = Router();
 
@@ -10,5 +11,6 @@ router.use(healthRouter);
 router.use(lessonsRouter);
 router.use(creatorsRouter);
 router.use(auditRouter);
+router.use(storyboardsRouter);
 
 export default router;

@@ -72,3 +72,58 @@ export interface AuditEvent {
 export async function getAuditEvents(limit = 50): Promise<AuditEvent[]> {
   return request<AuditEvent[]>(`/audit/events?limit=${limit}`);
 }
+
+// --- Storyboard API ---
+
+export interface SceneElement {
+  type: string;
+  content: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  drawOrder?: number;
+  timingHint?: string;
+}
+
+export interface Scene {
+  id: number;
+  order: number;
+  title: string;
+  narration: string;
+  durationSec: number;
+  elements: SceneElement[];
+}
+
+export interface SafetyFlag {
+  category: string;
+  severity: "info" | "warning" | "block";
+  message: string;
+}
+
+export interface StoryboardResult {
+  id: number;
+  lessonId: number;
+  revision: number;
+  status: string;
+  briefText: string;
+  scenes: Scene[];
+  safetyFlags: SafetyFlag[];
+  modelUsed: string;
+  createdAt: string;
+}
+
+export async function generateStoryboard(lessonId: number, brief: string): Promise<StoryboardResult> {
+  return request<StoryboardResult>("/storyboards/generate", {
+    method: "POST",
+    body: JSON.stringify({ lessonId, brief }),
+  });
+}
+
+export async function getStoryboard(id: number): Promise<StoryboardResult> {
+  return request<StoryboardResult>(`/storyboards/${id}`);
+}
+
+export async function getStoryboardsByLesson(lessonId: number): Promise<StoryboardResult[]> {
+  return request<StoryboardResult[]>(`/storyboards?lessonId=${lessonId}`);
+}
