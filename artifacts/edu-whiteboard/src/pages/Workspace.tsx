@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useGetLesson, getGetLessonQueryKey } from '@workspace/api-client-react';
-import { ArrowLeft, ChevronDown, CheckCircle2, Circle, Send, Loader2, ChevronUp, Plus, FileText } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CheckCircle2, Circle, Send, Loader2, ChevronUp, Plus, FileText, Play } from 'lucide-react';
 import BriefInput from '@/components/BriefInput';
 import StoryboardViewer from '@/components/StoryboardViewer';
 import { generateStoryboard, getStoryboardsByLesson } from '@/lib/api';
-import type { StoryboardResult, Scene, SafetyFlag } from '@/lib/api';
+import type { StoryboardResult, Scene, SafetyFlag, ApproveRenderResult } from '@/lib/api';
+import CreditBalance from '@/components/CreditBalance';
+import ApproveRenderDialog from '@/components/ApproveRender';
 
 const Logo = () => (
   <div className="flex items-center gap-2">
@@ -24,6 +26,8 @@ export default function Workspace() {
   const [storyboard, setStoryboard] = useState<StoryboardResult | null>(null);
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showApprove, setShowApprove] = useState(false);
+  const [renderApproved, setRenderApproved] = useState(false);
 
   const { data: lesson, isLoading, isError } = useGetLesson(id, {
     query: {
@@ -64,6 +68,20 @@ export default function Workspace() {
     setScenes(updatedScenes);
   };
 
+  const totalElements = scenes.reduce(
+    (sum, s) => sum + (s.elements?.length ?? 0),
+    0,
+  );
+  const costPerScene = 10;
+  const costPerElement = 2;
+  const assemblyCost = 15;
+  const estimatedCost = scenes.length * costPerScene + totalElements * costPerElement + assemblyCost;
+
+  const handleRenderApproved = (result: ApproveRenderResult) => {
+    setRenderApproved(true);
+    setShowApprove(false);
+  };
+
   return (
     <div className="w-screen h-screen bg-background font-sans text-foreground flex flex-col overflow-hidden">
       {/* Top Header */}
@@ -96,6 +114,23 @@ export default function Workspace() {
             )}
           </div>
         </div>
+        <CreditBalance />
+        {scenes.length > 0 && !renderApproved && (
+          <button
+            onClick={() => setShowApprove(true)}
+            className="bg-secondary hover:opacity-90 text-secondary-foreground px-4 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"
+            data-testid="button-approve-render"
+          >
+            <Play className="w-4 h-4" />
+            Generate Video
+          </button>
+        )}
+        {renderApproved && (
+          <span className="text-xs text-green-500 font-medium flex items-center gap-1">
+            <CheckCircle2 className="w-4 h-4" />
+            Approved
+          </span>
+        )}
         {scenes.length > 0 && (
           <button 
             onClick={() => setLocation(`/lessons/${id}/export`)}
@@ -283,6 +318,16 @@ export default function Workspace() {
           )}
         </div>
       </main>
+      {showApprove && storyboard && (
+        <ApproveRenderDialog
+          storyboardId={storyboard.id}
+          sceneCount={scenes.length}
+          elementCount={totalElements}
+          estimatedCost={estimatedCost}
+          onApproved={handleRenderApproved}
+          onClose={() => setShowApprove(false)}
+        />
+      )}
     </div>
   );
 }

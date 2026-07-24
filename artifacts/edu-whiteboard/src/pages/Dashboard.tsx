@@ -11,6 +11,7 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/components/AuthProvider';
+import CreditBalance from '@/components/CreditBalance';
 
 // Logo component
 const Logo = () => (
@@ -289,6 +290,7 @@ export default function Dashboard() {
               <span className="hidden sm:inline">{creator.name || creator.email}</span>
             </div>
           )}
+          <CreditBalance />
           <button 
             onClick={() => setIsDialogOpen(true)}
             className="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-sm"

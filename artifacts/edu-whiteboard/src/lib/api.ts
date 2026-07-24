@@ -148,3 +148,58 @@ export async function reorderStoryboardScenes(
     body: JSON.stringify({ sceneIds }),
   });
 }
+
+// --- Credit API ---
+
+export interface CreditBalance {
+  available: number;
+  held: number;
+  totalGrants: number;
+}
+
+export interface CreditLedgerEntry {
+  id: number;
+  creatorId: number;
+  entryType: string;
+  amount: string;
+  balanceAfter: string;
+  description: string;
+  referenceType: string | null;
+  referenceId: number | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface ApproveRenderResult {
+  approved: boolean;
+  storyboardId: number;
+  estimatedCost: number;
+  availableAfterHold: number;
+  holdDescription: string;
+}
+
+export async function getCreditBalance(): Promise<CreditBalance> {
+  return request<CreditBalance>("/credits/balance");
+}
+
+export async function getCreditLedger(limit = 50): Promise<CreditLedgerEntry[]> {
+  return request<CreditLedgerEntry[]>(`/credits/ledger?limit=${limit}`);
+}
+
+export async function approveRender(storyboardId: number): Promise<ApproveRenderResult> {
+  return request<ApproveRenderResult>("/credits/approve-render", {
+    method: "POST",
+    body: JSON.stringify({ storyboardId }),
+  });
+}
+
+export async function mockCheckout(amount: number): Promise<{
+  success: boolean;
+  creditsAdded: number;
+  newBalance: number;
+}> {
+  return request("/credits/mock-checkout", {
+    method: "POST",
+    body: JSON.stringify({ amount }),
+  });
+}
