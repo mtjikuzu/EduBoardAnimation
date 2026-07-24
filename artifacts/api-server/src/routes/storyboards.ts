@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, desc, and } from "drizzle-orm";
-import { db, lessonsTable as lessonTable, storyboardsTable } from "@workspace/db";
+import { db, lessonsTable as lessonTable, storyboardsTable, auditEventsTable } from "@workspace/db";
 import { BriefInput } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
@@ -209,6 +209,174 @@ router.get("/storyboards", async (req: AuthenticatedRequest, res): Promise<void>
     .orderBy(desc(storyboardsTable.createdAt));
 
   res.json(boards);
+});
+
+/**
+ * PATCH /storyboards/:id/scenes
+ *
+ * Updates one or more scenes in a storyboard and increments the revision.
+ * Body: { scenes: Scene[], changedSceneIds?: number[] }
+ */
+router.patch("/storyboards/:id/scenes", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const storyboardId = parseInt(raw, 10);
+
+  if (Number.isNaN(storyboardId)) {
+    res.status(400).json({ error: "Invalid storyboard ID" });
+    return;
+  }
+
+  // Fetch the existing storyboard
+  const [existing] = await db
+    .select()
+    .from(storyboardsTable)
+    .where(eq(storyboardsTable.id, storyboardId));
+
+  if (!existing) {
+    res.status(404).json({ error: "Storyboard not found" });
+    return;
+  }
+
+  // Verify ownership via the linked lesson
+  const [lesson] = await db
+    .select({ id: lessonTable.id })
+    .from(lessonTable)
+    .where(
+      and(
+        eq(lessonTable.id, existing.lessonId),
+        eq(lessonTable.creatorId, creatorId),
+      ),
+    );
+
+  if (!lesson) {
+    res.status(404).json({ error: "Storyboard not found" });
+    return;
+  }
+
+  const { scenes, changedSceneIds } = req.body;
+  if (!Array.isArray(scenes) || scenes.length === 0) {
+    res.status(400).json({ error: "scenes array is required" });
+    return;
+  }
+
+  // Create new revision: insert a fresh row with incremented revision number
+  const [updated] = await db
+    .insert(storyboardsTable)
+    .values({
+      lessonId: existing.lessonId,
+      revision: existing.revision + 1,
+      briefText: existing.briefText ?? "",
+      status: "validated",
+      scenes: scenes,
+      safetyFlags: existing.safetyFlags ?? [],
+    })
+    .returning();
+
+  res.json({
+    id: updated.id,
+    lessonId: updated.lessonId,
+    revision: updated.revision,
+    status: updated.status,
+    briefText: updated.briefText,
+    scenes: scenes,
+    safetyFlags: existing.safetyFlags ?? [],
+    createdAt: updated.createdAt,
+  });
+});
+
+/**
+ * PATCH /storyboards/:id/reorder
+ *
+ * Reorders scenes in a storyboard.
+ * Body: { sceneIds: number[] } (ordered array of scene IDs)
+ */
+router.patch("/storyboards/:id/reorder", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const storyboardId = parseInt(raw, 10);
+
+  if (Number.isNaN(storyboardId)) {
+    res.status(400).json({ error: "Invalid storyboard ID" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(storyboardsTable)
+    .where(eq(storyboardsTable.id, storyboardId));
+
+  if (!existing) {
+    res.status(404).json({ error: "Storyboard not found" });
+    return;
+  }
+
+  const [lesson] = await db
+    .select({ id: lessonTable.id })
+    .from(lessonTable)
+    .where(
+      and(
+        eq(lessonTable.id, existing.lessonId),
+        eq(lessonTable.creatorId, creatorId),
+      ),
+    );
+
+  if (!lesson) {
+    res.status(404).json({ error: "Storyboard not found" });
+    return;
+  }
+
+  const { sceneIds } = req.body;
+  if (!Array.isArray(sceneIds) || sceneIds.length === 0) {
+    res.status(400).json({ error: "sceneIds array is required" });
+    return;
+  }
+
+  const currentScenes: Array<{ id: number } & Record<string, unknown>> = 
+    typeof existing.scenes === "string" ? JSON.parse(existing.scenes) : existing.scenes;
+
+  // Build a map for quick lookup
+  const sceneMap = new Map<number, typeof currentScenes[number]>();
+  for (const s of currentScenes) {
+    sceneMap.set(s.id, s);
+  }
+
+  // Build new ordered array
+  const reordered = sceneIds
+    .filter((id: number) => sceneMap.has(id))
+    .map((id: number, idx: number) => ({
+      ...sceneMap.get(id)!,
+      order: idx + 1,
+    }));
+
+  if (reordered.length === 0) {
+    res.status(400).json({ error: "No valid scenes to reorder" });
+    return;
+  }
+
+  // Create new revision with reordered scenes
+  const [updated] = await db
+    .insert(storyboardsTable)
+    .values({
+      lessonId: existing.lessonId,
+      revision: existing.revision + 1,
+      briefText: existing.briefText ?? "",
+      status: "validated",
+      scenes: reordered,
+      safetyFlags: existing.safetyFlags ?? [],
+    })
+    .returning();
+
+  res.json({
+    id: updated.id,
+    lessonId: updated.lessonId,
+    revision: updated.revision,
+    status: updated.status,
+    briefText: updated.briefText,
+    scenes: reordered,
+    safetyFlags: existing.safetyFlags ?? [],
+    createdAt: updated.createdAt,
+  });
 });
 
 export default router;

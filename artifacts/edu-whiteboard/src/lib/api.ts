@@ -127,3 +127,24 @@ export async function getStoryboard(id: number): Promise<StoryboardResult> {
 export async function getStoryboardsByLesson(lessonId: number): Promise<StoryboardResult[]> {
   return request<StoryboardResult[]>(`/storyboards?lessonId=${lessonId}`);
 }
+
+export async function updateStoryboardScenes(
+  storyboardId: number,
+  scenes: Scene[],
+  changedSceneIds?: number[],
+): Promise<StoryboardResult> {
+  return request<StoryboardResult>(`/storyboards/${storyboardId}/scenes`, {
+    method: "PATCH",
+    body: JSON.stringify({ scenes, changedSceneIds }),
+  });
+}
+
+export async function reorderStoryboardScenes(
+  storyboardId: number,
+  sceneIds: number[],
+): Promise<StoryboardResult> {
+  return request<StoryboardResult>(`/storyboards/${storyboardId}/reorder`, {
+    method: "PATCH",
+    body: JSON.stringify({ sceneIds }),
+  });
+}

@@ -22,6 +22,7 @@ export default function Workspace() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [storyboard, setStoryboard] = useState<StoryboardResult | null>(null);
+  const [scenes, setScenes] = useState<Scene[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const { data: lesson, isLoading, isError } = useGetLesson(id, {
@@ -37,6 +38,7 @@ export default function Workspace() {
     try {
       const result = await generateStoryboard(id, brief);
       setStoryboard(result);
+      setScenes(result.scenes);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate storyboard');
     } finally {
@@ -58,7 +60,9 @@ export default function Workspace() {
     );
   }
 
-  const scenes = storyboard?.scenes ?? [];
+  const handleScenesUpdated = (updatedScenes: Scene[]) => {
+    setScenes(updatedScenes);
+  };
 
   return (
     <div className="w-screen h-screen bg-background font-sans text-foreground flex flex-col overflow-hidden">
@@ -129,10 +133,12 @@ export default function Workspace() {
               />
             ) : (
               <StoryboardViewer
+                storyboardId={storyboard.id}
                 scenes={scenes}
                 safetyFlags={(storyboard as StoryboardResult).safetyFlags}
                 modelUsed={(storyboard as StoryboardResult).modelUsed}
                 status={(storyboard as StoryboardResult).status}
+                onScenesUpdated={handleScenesUpdated}
               />
             )}
           </div>
