@@ -1,0 +1,25 @@
+# EduWhiteboard local development environment
+# Start with: docker compose up -d
+# Stop with:  docker compose down
+
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: eduwb-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: eduwb
+      POSTGRES_PASSWORD: eduwb
+      POSTGRES_DB: eduwb
+    volumes:
+      - eduwb-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduwb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  eduwb-pgdata:
