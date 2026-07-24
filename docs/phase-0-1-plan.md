@@ -9,7 +9,7 @@ Ship an invite-only, US-paid B2C beta for 50–100 adult English-speaking educat
 - **Hosting:** TanStack Start web/API on ECS Fargate; separate Fargate render workers; RDS PostgreSQL, S3, Redis, SQS, KMS/Secrets Manager, and OpenTelemetry.
 - **Generation:** OpenAI Structured Outputs for lesson/storyboard generation and ElevenLabs timestamped English TTS, both behind provider ports and Zod validation.
 - **Rendering:** deterministic storyboard → SVG/HTML timeline → pinned Chromium frames → FFmpeg scene MP4/assembly. Rough.js, MathJax, curated assets; no freeform canvas or AI illustration generation.
-- **Commerce:** Clerk authentication, Stripe Checkout/Billing, and a first-party immutable render-credit ledger. Paid beta is US-only; global visitors may join the waitlist.
+- **Commerce:** Clerk authentication, Polar Checkout/webhooks, and a first-party immutable render-credit ledger. Paid beta is US-only; global visitors may join the waitlist.
 - **Publishing:** creator-approved YouTube OAuth upload with the least-privilege upload scope, encrypted revocable refresh tokens, private default visibility, quota-aware worker, and processing reconciliation.
 
 ## Phased backlog
@@ -41,7 +41,7 @@ Ship an invite-only, US-paid B2C beta for 50–100 adult English-speaking educat
 
 ### Phase 1C — publishing, billing, and beta operations
 
-1. Add Stripe Checkout/webhooks and immutable credit-ledger operations; protect webhook endpoints and reconcile payment events.
+1. Add Polar Checkout/webhooks and immutable credit-ledger operations; protect webhook endpoints and reconcile payment events.
 2. Add Google OAuth/YouTube connection, explicit metadata/visibility review, resumable quota-aware upload, processing polling, revocation, and publish audit events.
 3. Complete Terms, Privacy Policy, consent copy, Google verification materials, support workflows, abuse/suspension/appeal tools, status page, budget alarms, and invite/waitlist flow.
 
@@ -70,7 +70,7 @@ Ship an invite-only, US-paid B2C beta for 50–100 adult English-speaking educat
 ## Operational rules
 
 - Pin and record every model/provider/renderer/style version per generated artifact; use golden lessons before any version change.
-- Daily reconcile SQS jobs, credit holds, provider failures, uploaded video status, Stripe events, object retention, and error-budget alerts.
+- Daily reconcile SQS jobs, credit holds, provider failures, uploaded video status, Polar events, object retention, and error-budget alerts.
 - Pause new paid invitations if p95 render latency, provider error rate, rendering cost, moderation escape rate, or support load exceeds pre-set operational thresholds.
 - Run quarterly dependency/license and provider-policy review; retain SBOM, notices, asset provenance, and FFmpeg build configuration.
 
