@@ -1,25 +1,43 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, desc } from "drizzle-orm";
-import { db, lessonsTable } from "@workspace/db";
-import {
-  GetLessonsQueryParams,
-  CreateLessonBody,
-  GetLessonParams,
-  GetLessonResponse,
-  UpdateLessonParams,
-  UpdateLessonBody,
-  UpdateLessonResponse,
-  DeleteLessonParams,
-  GetLessonsResponse,
-  CreateLessonResponse,
-  GetLessonStatsResponse,
-} from "@workspace/api-zod";
+import { eq, ilike, desc, and } from "drizzle-orm";
+import { db, lessonsTable, auditEventsTable } from "@workspace/db";
+import { logger } from "../lib/logger";
+import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 
 const router: IRouter = Router();
 
+// All lesson routes require authentication
+router.use("/lessons", requireAuth);
+
+async function recordAudit(
+  creatorId: number,
+  action: string,
+  entityType: string,
+  entityId?: number,
+  metadata?: Record<string, unknown>,
+) {
+  try {
+    await db.insert(auditEventsTable).values({
+      creatorId,
+      action,
+      entityType,
+      entityId,
+      metadata: metadata ?? null,
+    });
+  } catch (err) {
+    logger.error({ err, action, entityType, entityId }, "Failed to record audit event");
+  }
+}
+
 // GET /lessons/stats — must be before /:id to avoid param collision
-router.get("/lessons/stats", async (_req, res): Promise<void> => {
-  const all = await db.select().from(lessonsTable);
+router.get("/lessons/stats", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
+  const all = await db
+    .select()
+    .from(lessonsTable)
+    .where(
+      and(eq(lessonsTable.creatorId, creatorId), eq(lessonsTable.isDeleted, false)),
+    );
   const stats = {
     total: all.length,
     byStatus: {
@@ -29,100 +47,140 @@ router.get("/lessons/stats", async (_req, res): Promise<void> => {
       rendering: all.filter((l) => l.status === "rendering").length,
     },
   };
-  res.json(GetLessonStatsResponse.parse(stats));
+  res.json(stats);
 });
 
 // GET /lessons
-router.get("/lessons", async (req, res): Promise<void> => {
-  const query = GetLessonsQueryParams.safeParse(req.query);
-  if (!query.success) {
-    res.status(400).json({ error: query.error.message });
-    return;
-  }
+router.get("/lessons", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
+  const search = req.query.search as string | undefined;
 
   let lessons;
-  if (query.data.search) {
+  if (search) {
     lessons = await db
       .select()
       .from(lessonsTable)
-      .where(ilike(lessonsTable.title, `%${query.data.search}%`))
-      .orderBy(desc(lessonsTable.updatedAt));
-  } else if (query.data.status) {
-    lessons = await db
-      .select()
-      .from(lessonsTable)
-      .where(eq(lessonsTable.status, query.data.status as "in_progress" | "completed" | "pending" | "rendering"))
+      .where(
+        and(
+          eq(lessonsTable.creatorId, creatorId),
+          eq(lessonsTable.isDeleted, false),
+          ilike(lessonsTable.title, `%${search}%`),
+        ),
+      )
       .orderBy(desc(lessonsTable.updatedAt));
   } else {
     lessons = await db
       .select()
       .from(lessonsTable)
+      .where(
+        and(
+          eq(lessonsTable.creatorId, creatorId),
+          eq(lessonsTable.isDeleted, false),
+        ),
+      )
       .orderBy(desc(lessonsTable.updatedAt));
   }
 
-  res.json(GetLessonsResponse.parse(lessons));
+  res.json(lessons);
 });
 
 // POST /lessons
-router.post("/lessons", async (req, res): Promise<void> => {
-  const parsed = CreateLessonBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+router.post("/lessons", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
+  const { title, grade, language, status } = req.body;
+
+  if (!title || !grade || !language) {
+    res.status(400).json({ error: "title, grade, and language are required" });
     return;
   }
 
-  const [lesson] = await db
-    .insert(lessonsTable)
-    .values({
-      ...parsed.data,
-      status: parsed.data.status ?? "pending",
-    })
-    .returning();
+  try {
+    const [lesson] = await db
+      .insert(lessonsTable)
+      .values({
+        creatorId,
+        title,
+        grade,
+        language,
+        status: status ?? "in_progress",
+      })
+      .returning();
 
-  res.status(201).json(CreateLessonResponse.parse(lesson));
+    await recordAudit(creatorId, "create", "lesson", lesson.id, {
+      title: lesson.title,
+    });
+
+    res.status(201).json(lesson);
+  } catch (err) {
+    logger.error({ err }, "Failed to create lesson");
+    res.status(500).json({ error: "Failed to create lesson" });
+  }
 });
 
 // GET /lessons/:id
-router.get("/lessons/:id", async (req, res): Promise<void> => {
+router.get("/lessons/:id", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = GetLessonParams.safeParse({ id: parseInt(raw, 10) });
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+  const lessonId = parseInt(raw, 10);
+
+  if (Number.isNaN(lessonId)) {
+    res.status(400).json({ error: "Invalid lesson ID" });
     return;
   }
 
   const [lesson] = await db
     .select()
     .from(lessonsTable)
-    .where(eq(lessonsTable.id, params.data.id));
+    .where(
+      and(
+        eq(lessonsTable.id, lessonId),
+        eq(lessonsTable.creatorId, creatorId),
+        eq(lessonsTable.isDeleted, false),
+      ),
+    );
 
   if (!lesson) {
     res.status(404).json({ error: "Lesson not found" });
     return;
   }
 
-  res.json(GetLessonResponse.parse(lesson));
+  res.json(lesson);
 });
 
 // PATCH /lessons/:id
-router.patch("/lessons/:id", async (req, res): Promise<void> => {
+router.patch("/lessons/:id", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = UpdateLessonParams.safeParse({ id: parseInt(raw, 10) });
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+  const lessonId = parseInt(raw, 10);
+
+  if (Number.isNaN(lessonId)) {
+    res.status(400).json({ error: "Invalid lesson ID" });
     return;
   }
 
-  const parsed = UpdateLessonBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const allowedFields = ["title", "grade", "language", "status", "thumbnailUrl", "durationMinutes"];
+  const updates: Record<string, unknown> = {};
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined) {
+      updates[field] = req.body[field];
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
     return;
   }
 
   const [lesson] = await db
     .update(lessonsTable)
-    .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(lessonsTable.id, params.data.id))
+    .set({ ...updates, updatedAt: new Date() })
+    .where(
+      and(
+        eq(lessonsTable.id, lessonId),
+        eq(lessonsTable.creatorId, creatorId),
+        eq(lessonsTable.isDeleted, false),
+      ),
+    )
     .returning();
 
   if (!lesson) {
@@ -130,27 +188,43 @@ router.patch("/lessons/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  res.json(UpdateLessonResponse.parse(lesson));
+  await recordAudit(creatorId, "update", "lesson", lesson.id, { updates });
+
+  res.json(lesson);
 });
 
-// DELETE /lessons/:id
-router.delete("/lessons/:id", async (req, res): Promise<void> => {
+// DELETE /lessons/:id (soft delete with audit trail)
+router.delete("/lessons/:id", async (req: AuthenticatedRequest, res): Promise<void> => {
+  const creatorId = req.creator!.id;
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const params = DeleteLessonParams.safeParse({ id: parseInt(raw, 10) });
-  if (!params.success) {
-    res.status(400).json({ error: params.error.message });
+  const lessonId = parseInt(raw, 10);
+
+  if (Number.isNaN(lessonId)) {
+    res.status(400).json({ error: "Invalid lesson ID" });
     return;
   }
 
+  // Soft delete: mark as deleted
   const [lesson] = await db
-    .delete(lessonsTable)
-    .where(eq(lessonsTable.id, params.data.id))
+    .update(lessonsTable)
+    .set({ isDeleted: true, updatedAt: new Date() })
+    .where(
+      and(
+        eq(lessonsTable.id, lessonId),
+        eq(lessonsTable.creatorId, creatorId),
+        eq(lessonsTable.isDeleted, false),
+      ),
+    )
     .returning();
 
   if (!lesson) {
     res.status(404).json({ error: "Lesson not found" });
     return;
   }
+
+  await recordAudit(creatorId, "delete", "lesson", lesson.id, {
+    title: lesson.title,
+  });
 
   res.sendStatus(204);
 });
