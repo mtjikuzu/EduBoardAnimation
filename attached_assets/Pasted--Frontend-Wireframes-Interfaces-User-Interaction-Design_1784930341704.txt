@@ -1,0 +1,188 @@
+**Frontend Wireframes, Interfaces & User Interaction Design**  
+EduWhiteboard (TanStack Start)
+
+Below is a complete, practical outline of the interfaces, textual/ASCII wireframes, and interaction patterns. These are derived directly from the PRD (chat + canvas split, warm educational aesthetic, agentic workflow, progressive generation, scene-level revisions, all challenge solutions).
+
+### 1. Information Architecture & Navigation
+
+**Top-level**
+- Dashboard (home / project list)
+- Project Workspace (the main application surface – most time spent here)
+- Settings
+- (Future: Asset Library, Team/School workspace)
+
+**Inside a Project**
+- Persistent top bar (project context + quick actions)
+- Always-available left Chat panel
+- Main area with tabs or resizable panes: **Canvas** | **Storyboard** | **Preview**
+- Optional right or bottom Storyboard timeline / scene cards
+
+Navigation is deliberately shallow. Teachers stay inside the Project Workspace for creation, review, and revision.
+
+### 2. Key Interfaces / Screens
+
+#### A. Dashboard
+
+```
++---------------------------------------------------------------------+
+|  EduWhiteboard Logo          [Search projects...]     [+ New Lesson] |
++---------------------------------------------------------------------+
+|  My Lessons                                              Filters ▼   |
+|                                                                     |
+|  +---------------+  +---------------+  +---------------+            |
+|  | [Thumbnail]   |  | [Thumbnail]   |  | [Thumbnail]   |            |
+|  | FIFO & AVCO   |  | Photosynthesis |  | Draft Lesson  |            |
+|  | Grade 10 • EN  |  | Grade 9 • OSH |  | Grade 10       |            |
+|  | 5:12  • Ready |  | 4:30  • Ready |  | Rendering…    |            |
+|  | 2 days ago    |  | 1 week ago    |  |               |            |
+|  +---------------+  +---------------+  +---------------+            |
+|                                                                     |
+|  (Empty state: large soft illustration of a hand drawing on a       |
+|   whiteboard + headline “Create your first educational video”       |
+|   + big “New Lesson” button + 3–4 example prompt chips)             |
++---------------------------------------------------------------------+
+```
+
+**Interactions**
+- Click card → open Project Workspace.
+- Hover → quick actions (Open, Duplicate, Delete, Export).
+- “+ New Lesson” immediately opens a fresh Workspace with chat focused.
+
+#### B. Project Workspace (Primary Interface)
+
+This is the heart of the application.
+
+```
++-----------------------------------------------------------------------------------+
+| ← Dashboard   Project Title (editable)   Grade 10   EN ▼   Voice ▼   [Export]  ⚙  |
++-------------+---------------------------------------------------+-----------------+
+|             |                                                   |                 |
+|  CHAT       |  [ Canvas ]  [ Storyboard ]  [ Preview ]          |  SCENE CARDS    |
+|  PANEL      |                                                   |  (collapsible)  |
+|  (~28-32%)  |                                                   |                 |
+|             |   +-------------------------------------------+   |  Scene 1        |
+|  Agent:     |   |                                           |   |  0:00–0:12      |
+|  “I’ve      |   |     EXCALIDRAW CANVAS                     |   |  [thumb]        |
+|  created    |   |     (or animated doodle / video player)   |   |  “A grocery…”   |
+|  8 scenes…” |   |                                           |   |  [Edit][Regen]  |
+|             |   |     Hand cursor appears during preview    |   |                 |
+|  ✓ Script   |   |                                           |   |  Scene 2        |
+|  ✓ Scenes   |   +-------------------------------------------+   |  ...            |
+|  ● Narration|                                                   |                 |
+|  ○ Render   |   Timeline / scene markers (when in Preview)      |  Scene 3 *      |
+|             |                                                   |  (highlighted)  |
+|  [Type a    |                                                   |                 |
+|   message…] |                                                   |  + Add Scene    |
+|  Suggested  |                                                   |                 |
+|  chips…     |                                                   |                 |
++-------------+---------------------------------------------------+-----------------+
+```
+
+**Main area variants**
+- **Canvas tab**: Live Excalidraw. Agent draws via MCP; teacher can select, move, erase, or add elements. Changes can be pushed back to the storyboard JSON.
+- **Storyboard tab**: Vertical or horizontal cards showing every scene (thumbnail, narration snippet, duration, elements list, math blocks, camera notes). Drag to reorder.
+- **Preview tab**: Video player with numbered scene markers on the scrubber. Clicking a marker jumps to that scene and focuses chat context on it.
+
+#### C. Progress / Generation States (inline in Chat)
+
+Progress appears as rich, expandable cards inside the chat panel:
+
+```
+✓ Lesson plan created
+✓ 8 scenes planned
+● Generating illustrations (4/8)
+  └─ Current: grocery shop + inventory table
+○ Narration
+○ Animation & hand drawing
+○ Final video assembly
+```
+
+A thin global progress bar also sits under the top bar or as a floating bottom timeline with scene dots that fill as they complete.
+
+#### D. Scene Card / Detail (expandable)
+
+```
++--------------------------------------+
+| Scene 03 • 0:42                      |
+| Narration: “A grocery shop buys…”    |
+| [Edit narration]                     |
+| Elements:                            |
+|  1. Title text          (order 1)    |
+|  2. Grocery icon        (order 2)    |
+|  3. Math: FIFO calc     (order 3)    |
+| Camera: zoom on calculation table    |
+| [Regenerate only this scene]         |
+| [Preview this scene alone]           |
++--------------------------------------+
+```
+
+#### E. Video Preview + Export
+
+Large centered player + side panel:
+
+- Timeline with scene markers (clickable, show “Updated” badge after partial regen).
+- Side list of scenes with one-click “Revise this scene”.
+- Download options: MP4 1080p / 720p, WebM, Audio-only.
+- Quick branding controls (logo position, intro/outro).
+
+#### F. Settings
+
+Tabbed interface:
+- **Voices & Languages** — provider list, sample playback, quality notes for Oshiwambo, defaults.
+- **Branding** — logo upload, position, templates.
+- **Models** — Ollama endpoint, preferred model, temperature.
+- **Asset Library** — browse, upload, tag, Rough.js preview.
+- **Render Defaults** — resolution, quality, local vs remote workers.
+- **Appearance** — cream theme, high-contrast, reduced-motion.
+
+### 3. Core User Interaction Patterns
+
+**1. Chat as the primary control surface**  
+Everything starts and is refined through natural language. The agent responds with streaming text + actionable progress cards and suggested chips (“Make shorter”, “Translate to Oshiwambo”, “Simplify the calculation in scene 3”).
+
+**2. Hybrid editing**
+- Natural language in chat.
+- Direct manipulation on the Excalidraw canvas.
+- Structured editing of storyboard cards / JSON fields.  
+All three stay synchronized via the storyboard JSON source of truth.
+
+**3. Progressive disclosure & feedback**
+- Immediate static canvas / storyboard preview after planning.
+- Low-fidelity or CSS-animated SVG preview while full render runs.
+- Full video only when ready (or on demand).
+- Teacher never waits without visible status.
+
+**4. Scene-centric revision loop**
+1. Teacher clicks a scene marker on the video timeline or a storyboard card.
+2. That scene is highlighted; chat context switches (“Focusing on Scene 3”).
+3. Teacher types a command or uses card actions.
+4. Agent updates the storyboard live and offers “Apply & Re-render only this scene”.
+5. Only the affected scene shows a mini progress indicator; the rest of the video remains cached.
+6. When finished, the player jumps to the updated segment with a soft “Updated” indicator.
+
+**5. First-time / Empty experience**
+- Dashboard empty state with illustration + example prompt chips.
+- New project: large centered chat input with example chips and a faint ghost canvas behind.
+
+**6. Micro-interactions & polish**
+- Live “Agent is drawing…” indicator + real-time path appearance on canvas.
+- Expandable progress cards showing sub-steps or current narration.
+- After partial regen: soft glow or temporary badge on the updated scene marker.
+- Keyboard shortcuts: `/` focus chat, number keys jump to scenes, `R` regenerate focused scene, `?` shows shortcut sheet.
+- Floating status indicator if the teacher navigates away while a job is running.
+
+### 4. Visual Wireframe Concepts
+
+Here are clean, professional wireframe visualizations of the four most important screens (warm cream background, soft teal/terracotta accents, modern educational aesthetic, labeled panels):
+
+
+
+
+
+
+
+
+
+These wireframes and interaction patterns fully support the agentic workflow, partial scene re-renders, modular TTS, Rough.js-consistent drawings, MathJax elements, progress streaming, and teacher-friendly editing we designed in the PRD.
+
+Would you like me to expand any screen into even more granular component hierarchy (React component tree suggestions for TanStack Start), add more visual variants, or produce a clickable prototype description / user-flow diagram next?
