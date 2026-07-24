@@ -203,3 +203,67 @@ export async function mockCheckout(amount: number): Promise<{
     body: JSON.stringify({ amount }),
   });
 }
+
+// --- Render API ---
+
+export interface RenderJobResult {
+  jobId: number;
+  status: string;
+  outputUrl?: string;
+}
+
+export async function renderPreview(params: { storyboardId: number; sceneIndex: number }): Promise<RenderJobResult> {
+  return request<RenderJobResult>("/renderer/preview", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export async function renderExport(params: { storyboardId: number }): Promise<RenderJobResult> {
+  return request<RenderJobResult>("/renderer/export", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
+export async function getRenderJob(jobId: number): Promise<{
+  id: number;
+  status: string;
+  progress: string;
+  outputUrl: string | null;
+  errorMessage: string | null;
+}> {
+  return request(`/renderer/jobs/${jobId}`);
+}
+
+// --- YouTube API ---
+
+export interface YouTubeConnectResult {
+  url: string;
+  note?: string;
+}
+
+export interface YouTubeUploadResult {
+  success: boolean;
+  videoId: string;
+  watchUrl: string;
+  privacyStatus: string;
+}
+
+export async function connectYouTube(): Promise<YouTubeConnectResult> {
+  return request<YouTubeConnectResult>("/publish/youtube/connect", {
+    method: "POST",
+  });
+}
+
+export async function uploadToYouTube(params: {
+  jobId: number;
+  title: string;
+  description: string;
+  privacyStatus: string;
+}): Promise<YouTubeUploadResult> {
+  return request<YouTubeUploadResult>("/publish/youtube/upload", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}

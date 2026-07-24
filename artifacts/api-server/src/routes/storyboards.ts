@@ -5,6 +5,7 @@ import { BriefInput } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 import { requireAuth, type AuthenticatedRequest } from "../middlewares/auth";
 import type { LessonPlanner, PlannerResult, PlannerError } from "../planner/types";
+import { checkBriefSafety } from "../renderer/contentSafety";
 
 const router: IRouter = Router();
 router.use("/storyboards", requireAuth);
@@ -56,6 +57,17 @@ router.post("/storyboards/generate", async (req: AuthenticatedRequest, res): Pro
 
   if (!lesson) {
     res.status(404).json({ error: "Lesson not found" });
+    return;
+  }
+
+  // Safety check
+  const safetyFlags = checkBriefSafety(parsed.data.brief);
+  const blocked = safetyFlags.filter((f) => f.severity === "block");
+  if (blocked.length > 0) {
+    res.status(422).json({
+      error: "Brief blocked by content policy",
+      safetyFlags: blocked,
+    });
     return;
   }
 
