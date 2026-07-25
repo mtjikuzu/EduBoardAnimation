@@ -453,6 +453,13 @@ export default function Dashboard() {
       </main>
       
       <NewLessonDialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} />
+      <NewLessonDialog isOpen={isDialogOpen} onClose={() => setIsDialogOpen(false)} />
+      <footer className="h-12 border-t border-border flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <span>&copy; {new Date().getFullYear()} EduWhiteboard</span>
+        <a href="/terms" className="hover:text-foreground">Terms</a>
+        <a href="/privacy" className="hover:text-foreground">Privacy</a>
+        <a href="/waitlist" className="hover:text-foreground">Join Waitlist</a>
+      </footer>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import storyboardsRouter from "./storyboards";
 import creditsRouter from "./credits";
 import renderRouter from "./render";
 import publishRouter from "./publish";
+import invitesRouter from "./invites";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(storyboardsRouter);
 router.use(creditsRouter);
 router.use(renderRouter);
 router.use(publishRouter);
+router.use(invitesRouter);
 
 export default router;
