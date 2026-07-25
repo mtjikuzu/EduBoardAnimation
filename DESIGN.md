@@ -3,35 +3,24 @@ name: "EduWhiteboard"
 colors:
   primary: "#5B51D8"
   secondary: "#F59E0B"
-  neutral: "#F3F4F6"
+  tertiary: "#F59E0B"
+  neutral: "#FFFFFF"
   success: "#10B981"
-  warning: "#F59E0B"
+  warning: "#D97706"
   danger: "#EF4444"
   surface: "#FFFFFF"
   text: "#1F2937"
-  muted: "#9CA3AF"
-  background: "#FAFAF9"
 typography:
   h1:
-    fontFamily: "DM Serif Display, Georgia, serif"
-    fontSize: 2.25rem
-  h2:
-    fontFamily: "DM Serif Display, Georgia, serif"
-    fontSize: 1.5rem
-  h3:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: 1.125rem
-    fontWeight: 600
-  body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: 0.875rem
-  small:
-    fontFamily: "Inter, system-ui, sans-serif"
+    fontFamily: "DM Serif Display"
+    fontSize: 3rem
+  body-md:
+    fontFamily: "Inter"
+    fontSize: 1rem
+  label-caps:
+    fontFamily: "JetBrains Mono"
     fontSize: 0.75rem
-  mono:
-    fontFamily: "JetBrains Mono, monospace"
-    fontSize: 0.8125rem
-  sourceScale: "desktop-first with 1.25 modular scale"
+  sourceScale: "desktop-first"
   weights: "400, 500, 600, 700"
 rounded:
   sm: 4px
@@ -39,6 +28,7 @@ rounded:
   lg: 12px
   xl: 16px
   xxl: 24px
+  full: 9999px
 spacing:
   xs: 4px
   sm: 8px
@@ -46,40 +36,36 @@ spacing:
   lg: 24px
   xl: 32px
   xxl: 48px
-  sourceScale: "4px baseline grid"
+  sourceScale: "4/8/12/16/24/32/48"
 ---
 
 ## Overview
-
-EduWhiteboard is a consumer SaaS for producing educational whiteboard videos from a conversational lesson brief. The UI should feel warm, focused, and professional — like a teacher's workspace, not a video editor.
+EduWhiteboard is a consumer SaaS that lets educational creators produce beautiful whiteboard videos from a conversational brief — no editing skills required. Warm, focused, and professional: like a well-designed classroom whiteboard.
 
 ## Style Foundations
-
-- **Visual style:** clean, warm, confident, minimal — like a well-designed classroom whiteboard. Generous whitespace, card-based layout, subtle shadows.
-- **Typography:** DM Serif Display for display/serif headings (warm editorial feel), Inter for body/UI (clean readability), JetBrains Mono for code/math
-- **Color palette:** Purple primary (#5B51D8 — creative/educational), amber accent (#F59E0B — warm highlight), warm gray neutrals. High contrast for accessibility.
-- **Spacing:** 4px baseline grid. Components use consistent padding tiers.
+- **Visual style:** clean, warm, confident, minimal, educational
+- **Typography scale:** desktop-first | Fonts: primary=Inter, display=DM Serif Display, mono=JetBrains Mono | weights=400, 500, 600, 700
+- **Color palette:** primary, secondary, neutral, success, warning, danger | Tokens: primary=#5B51D8, secondary=#F59E0B, success=#10B981, warning=#D97706, danger=#EF4444, surface=#FFFFFF, text=#1F2937
+- **Spacing scale:** 4/8/12/16/24/32/48
 
 ## Accessibility
-
 WCAG 2.1 AA minimum. Focus indicators on all interactive elements. Color not used as sole indicator. Sufficient contrast on all text/background combinations.
 
 ## Writing Tone
-
-confident, encouraging, clear. Use active voice. Address the creator directly ("you"). Avoid jargon. Error messages explain what happened and what to do next.
+confident, encouraging, clear, active voice. Address the creator directly. Avoid jargon.
 
 ## Rules: Do
-
-- Use card-based layouts with consistent border-radius (xl for modals, lg for cards, md for inputs)
-- Keep one primary action per view — make it visually prominent (filled button)
-- Show loading states as skeleton screens or clean spinners, never throbbers
-- Use the serif font for page titles and section headings to establish warmth
+- Use card-based layouts with consistent border-radius
+- Keep one primary action per view — make it a filled button with the primary token
+- Show loading states as skeleton screens or clean spinners
+- Use serif font (DM Serif Display) for page titles and section headings
 - Group form inputs with clear labels, help text, and error states
-- Use the warm gray background (#FAFAF9) for page-level containers
-- Toast notifications for success/error feedback, positioned top-right
+- Use warm gray background (#FAFAF9) for page-level containers
+- Use toast notifications for success/error feedback, positioned top-right
+- Prefer semantic tokens over raw values
+- Preserve visual hierarchy
 
 ## Rules: Don't
-
 - Don't use pure black text on white — use #1F2937 for body text
 - Don't stack more than two primary buttons in one view
 - Don't use icon-only buttons without aria-labels
@@ -87,3 +73,4 @@ confident, encouraging, clear. Use active voice. Address the creator directly ("
 - Don't let content exceed 1280px width on desktop
 - Don't disable browser default focus styles without replacing them
 - Don't use placeholder text as a substitute for form labels
+- Avoid low contrast text or inconsistent spacing rhythm
