@@ -105,9 +105,11 @@ router.post("/credits/approve-render", async (req: AuthenticatedRequest, res): P
   const balance = await getBalance(creatorId);
 
   // Parse scenes and estimate cost
-  const scenes = typeof storyboard.scenes === "string"
+  const rawScenes = typeof storyboard.scenes === "string"
     ? JSON.parse(storyboard.scenes)
-    : (storyboard.scenes ?? []);
+    : (storyboard.scenes ?? {});
+  // The planner output wraps scenes inside a top-level object
+  const scenes = Array.isArray(rawScenes) ? rawScenes : (Array.isArray((rawScenes as Record<string, unknown>).scenes) ? (rawScenes as Record<string, unknown>).scenes : []);
   const totalElements = scenes.reduce(
     (sum: number, s: { elements?: unknown[] }) => sum + (s.elements?.length ?? 0),
     0,

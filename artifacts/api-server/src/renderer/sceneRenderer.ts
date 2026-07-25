@@ -1,27 +1,51 @@
-import { db, renderJobsTable, storyboardsTable, creditLedgerTable, lessonsTable as lessonTable } from "@workspace/db";
-import { eq, and, sql } from "drizzle-orm";
-import { logger } from "../lib/logger";
-import { addLedgerEntry, getBalance, estimateRenderCost } from "../lib/credits";
-
 /**
  * Scene renderer — produces a narrated whiteboard scene.
  *
- * In the beta this runs in a separate worker (Fargate task) that:
- * 1. Reads the scene JSON from the storyboard
- * 2. Compiles an SVG/HTML timeline with Rough.js paths and MathJax equations
- * 3. Captures 30fps frames via headless Chromium
- * 4. Encodes with FFmpeg to the fixed 1080p H.264/AAC contract
- * 5. Uploads the clip to S3
- * 6. Reports job completion
- *
- * For the prototype we simulate the pipeline and record the result.
+ * Orchestrates the full rendering pipeline:
+ * 1. Reads scene JSON from the storyboard
+ * 2. Compiles an SVG/HTML timeline via svgTimeline
+ * 3. Generates narration audio via ElevenLabs/fallback TTS
+ * 4. Generates captions from narration text
+ * 5. Captures frames via headless Chromium
+ * 6. Encodes scene video with FFmpeg
+ * 7. Checks content-hash cache for scene-only invalidation
+ * 8. Records render job status throughout
  */
+import { db, renderJobsTable, storyboardsTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { logger } from "../lib/logger";
+import { addLedgerEntry } from "../lib/credits";
+import { compileScene } from "./svgTimeline";
+import { captureFrames } from "./frameCapture";
+import { encodeScene, assembleLesson, checkAVSync, FIXED_MEDIA_CONTRACT } from "./ffmpegEncoder";
+import { generateNarration } from "./elevenLabsTTS";
+import { generateCaptionSegments, segmentsToSrt, segmentsToVtt } from "./captionGenerator";
+import {
+  computeContentHash,
+  findCachedRender,
+  getCurrentStyleVersion,
+  getRendererVersion,
+  getMediaContractKey,
+} from "./contentHashCache";
 
 export type RenderProgressCallback = (jobId: number, status: string, progress: number) => Promise<void>;
 
-/**
- * Create a render job and queue it for processing.
- */
+/** Extract the scenes array from storyboard data (handles nested planner output). */
+function extractScenes(storyboard: { scenes: unknown }): unknown[] {
+  const raw = typeof storyboard.scenes === "string"
+    ? JSON.parse(storyboard.scenes)
+    : (storyboard.scenes ?? []);
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).scenes)) {
+    return (raw as Record<string, unknown>).scenes as unknown[];
+  }
+  return [];
+}
+
 export async function createRenderJob(
   storyboardId: number,
   jobType: "scene_preview" | "full_export" | "scene_regen",
@@ -32,21 +56,16 @@ export async function createRenderJob(
     .from(storyboardsTable)
     .where(eq(storyboardsTable.id, storyboardId));
 
-  if (!storyboard) {
-    throw new Error("Storyboard not found");
-  }
+  if (!storyboard) throw new Error("Storyboard not found");
 
-  const scenes = typeof storyboard.scenes === "string"
-    ? JSON.parse(storyboard.scenes)
-    : (storyboard.scenes ?? []);
-
+  const scenes = extractScenes(storyboard);
   const targetScenes = sceneIndex !== undefined ? [scenes[sceneIndex]] : scenes;
-  const totalElements = targetScenes.reduce(
-    (sum: number, s: { elements?: unknown[] }) => sum + (s.elements?.length ?? 0),
+  const totalElements = (targetScenes as Array<{ elements?: unknown[] }>).reduce(
+    (sum: number, s) => sum + ((s.elements as unknown[])?.length ?? 0),
     0,
   );
 
-  const cost = estimateRenderCost(targetScenes.length, totalElements);
+  const cost = targetScenes.length * 10 + totalElements * 2 + 15;
 
   const [job] = await db
     .insert(renderJobsTable)
@@ -60,6 +79,8 @@ export async function createRenderJob(
       metadata: {
         sceneCount: targetScenes.length,
         elementCount: totalElements,
+        styleVersion: getCurrentStyleVersion(),
+        rendererVersion: getRendererVersion(),
       },
     })
     .returning();
@@ -67,71 +88,186 @@ export async function createRenderJob(
   return { jobId: job.id, estimatedCost: cost };
 }
 
-/**
- * Start processing a render job.
- * In production this dispatches to a BullMQ/SQS worker.
- * For the prototype, we simulate completion.
- */
 export async function processRenderJob(jobId: number): Promise<void> {
   const [job] = await db
     .select()
     .from(renderJobsTable)
     .where(eq(renderJobsTable.id, jobId));
 
-  if (!job) {
-    throw new Error(`Render job ${jobId} not found`);
-  }
+  if (!job) throw new Error(`Render job ${jobId} not found`);
 
   logger.info({ jobId, jobType: job.jobType }, "Processing render job");
 
-  // Simulate render progress
-  await db
-    .update(renderJobsTable)
-    .set({ status: "rendering", progress: "10", updatedAt: new Date() })
-    .where(eq(renderJobsTable.id, jobId));
+  try {
+    const [storyboard] = await db
+      .select()
+      .from(storyboardsTable)
+      .where(eq(storyboardsTable.id, job.storyboardId));
+    if (!storyboard) throw new Error("Storyboard not found");
 
-  // In production: actual SVG rendering → Chromium capture → FFmpeg encoding → S3 upload
-  // For the prototype: simulate success after a short delay
-  await new Promise((r) => setTimeout(r, 2000));
+    const scenes = extractScenes(storyboard);
 
-  await db
-    .update(renderJobsTable)
-    .set({
-      status: "completed",
-      progress: "100",
-      actualCost: job.estimatedCost,
-      outputUrl: `/api/renderer/output/${jobId}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(renderJobsTable.id, jobId));
+    const targetScenes = job.sceneIndex !== null
+      ? [scenes[job.sceneIndex]]
+      : scenes;
 
-  logger.info({ jobId }, "Render job completed");
+    const globalStyle = ((storyboard as any).globalStyle ?? {});
+
+    const workDir = join(tmpdir(), `eduwb-render-${randomUUID()}`);
+    mkdirSync(workDir, { recursive: true });
+    const sceneClips: string[] = [];
+
+    await updateJobProgress(jobId, "rendering", 5);
+
+    for (let i = 0; i < targetScenes.length; i++) {
+      const scene = targetScenes[i] as Record<string, unknown>;
+      const sceneProgress = 5 + ((i + 1) / targetScenes.length) * 85;
+
+      const narrationText = String(scene.narration ?? "");
+
+      // Check content hash cache
+      const contentHash = computeContentHash({
+        storyboardId: job.storyboardId,
+        sceneIndex: job.sceneIndex,
+        scenes,
+        styleVersion: getCurrentStyleVersion(),
+        rendererVersion: getRendererVersion(),
+        narrationHashes: [hashString(narrationText)],
+        mediaContract: getMediaContractKey(),
+      });
+
+      const cached = await findCachedRender(job.storyboardId, job.sceneIndex, contentHash);
+      if (cached) {
+        logger.info({ jobId, sceneIndex: i, contentHash }, "Cache hit");
+        sceneClips.push(cached.outputPath);
+        continue;
+      }
+
+      // Generate narration audio
+      logger.info({ jobId, sceneIndex: i, sceneCount: targetScenes.length }, "Starting scene render");
+      const narration = await generateNarration(narrationText);
+      await updateJobProgress(jobId, "rendering", sceneProgress * 0.3);
+
+      // Generate captions
+      const captionSegments = generateCaptionSegments(narrationText);
+      const srtContent = segmentsToSrt(captionSegments);
+      const srtPath = join(workDir, `scene-${i}-captions.srt`);
+      writeFileSync(srtPath, srtContent);
+
+      // Compile SVG timeline
+      const rawElements = (scene.elements ?? []) as Array<Record<string, unknown>>;
+      const timelineElements = rawElements.map((el) => ({
+        type: String(el.type ?? "text"),
+        content: String(el.content ?? ""),
+        x: Number(el.x ?? 0),
+        y: Number(el.y ?? 0),
+        width: el.width ? Number(el.width) : undefined,
+        height: el.height ? Number(el.height) : undefined,
+        drawOrder: Number(el.drawOrder ?? 0),
+        timingHint: el.timingHint ? String(el.timingHint) : undefined,
+      }));
+
+      const htmlContent = compileScene(
+        timelineElements,
+        narrationText,
+        Number(scene.durationSec ?? 60),
+        globalStyle as { strokeWidth?: number; roughness?: number; palette?: string[] },
+      );
+      await updateJobProgress(jobId, "rendering", sceneProgress * 0.5);
+
+      // Capture frames via Chromium
+      const captureResult = await captureFrames(htmlContent, {
+        durationSec: Number(scene.durationSec ?? 60),
+        fps: FIXED_MEDIA_CONTRACT.fps,
+        width: FIXED_MEDIA_CONTRACT.width,
+        height: FIXED_MEDIA_CONTRACT.height,
+        outputDir: join(workDir, `scene-${i}-frames`),
+      });
+      await updateJobProgress(jobId, "rendering", sceneProgress * 0.7);
+
+      // Encode scene video
+      const sceneOutput = join(workDir, `scene-${i}.mp4`);
+      const encodeResult = encodeScene(
+        captureResult.outputDir,
+        "frame-*.png",
+        narration.audioPath,
+        sceneOutput,
+      );
+      sceneClips.push(sceneOutput);
+
+      const syncCheck = checkAVSync(Number(scene.durationSec ?? 60), encodeResult.durationSec);
+      if (!syncCheck.inSync) {
+        logger.warn({ jobId, sceneIndex: i, driftMs: syncCheck.driftMs }, "A/V sync drift");
+      }
+
+      await updateJobProgress(jobId, "rendering", sceneProgress);
+    }
+
+    // Assemble final MP4
+    let outputPath: string;
+    if (targetScenes.length > 1) {
+      outputPath = join(workDir, "lesson-final.mp4");
+      assembleLesson(sceneClips, outputPath);
+    } else {
+      outputPath = sceneClips[0];
+    }
+    await updateJobProgress(jobId, "rendering", 95);
+
+    await db
+      .update(renderJobsTable)
+      .set({
+        status: "completed" as const,
+        progress: "100",
+        actualCost: job.estimatedCost,
+        outputUrl: outputPath,
+        metadata: {
+          ...((job.metadata as Record<string, unknown>) ?? {}),
+          contentHash: computeContentHash({
+            storyboardId: job.storyboardId,
+            sceneIndex: job.sceneIndex,
+            scenes,
+            styleVersion: getCurrentStyleVersion(),
+            rendererVersion: getRendererVersion(),
+            narrationHashes: targetScenes.map(
+              (s: Record<string, unknown>) => hashString(String(s.narration ?? "")),
+            ),
+            mediaContract: getMediaContractKey(),
+          }),
+          sceneCount: targetScenes.length,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(renderJobsTable.id, jobId));
+
+    logger.info({ jobId, outputPath }, "Render job completed");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, jobId }, "Render job failed");
+
+    await db
+      .update(renderJobsTable)
+      .set({
+        status: "failed" as const,
+        errorMessage: message,
+        progress: "0",
+        updatedAt: new Date(),
+      })
+      .where(eq(renderJobsTable.id, jobId));
+  }
 }
 
-/**
- * Consume the credit hold and finalise the render.
- */
-export async function finaliseRenderCosts(
-  creatorId: number,
-  storyboardId: number,
+async function updateJobProgress(
   jobId: number,
+  status: string,
+  progress: number,
 ): Promise<void> {
-  const [job] = await db
-    .select()
-    .from(renderJobsTable)
+  const s = status === "rendering" ? "rendering" as const : status === "queued" ? "queued" as const : "rendering" as const;
+  await db
+    .update(renderJobsTable)
+    .set({ status: s, progress: String(Math.round(progress)), updatedAt: new Date() })
     .where(eq(renderJobsTable.id, jobId));
+}
 
-  if (!job) return;
-
-  const cost = Number(job.actualCost || job.estimatedCost || 0);
-  if (cost > 0) {
-    await addLedgerEntry(
-      creatorId,
-      "consume",
-      cost,
-      `Render job #${jobId} (${job.jobType})`,
-      { type: "render_job", id: jobId },
-      { storyboardId },
-    );
-  }
+function hashString(s: string): string {
+  return createHash("sha256").update(s).digest("hex").slice(0, 16);
 }
