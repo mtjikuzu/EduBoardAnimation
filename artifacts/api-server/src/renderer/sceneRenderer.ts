@@ -22,7 +22,7 @@ import { addLedgerEntry } from "../lib/credits";
 import { compileScene } from "./svgTimeline";
 import { captureFrames } from "./frameCapture";
 import { encodeScene, assembleLesson, checkAVSync, FIXED_MEDIA_CONTRACT } from "./ffmpegEncoder";
-import { generateNarration } from "./elevenLabsTTS";
+import { generateNarration } from "./kokoroTTS";
 import { generateCaptionSegments, segmentsToSrt, segmentsToVtt } from "./captionGenerator";
 import {
   computeContentHash,

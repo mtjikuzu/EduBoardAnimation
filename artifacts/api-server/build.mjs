@@ -100,6 +100,9 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "kokoro-js",
+      "@huggingface/transformers",
+      "onnxruntime-node",
     ],
     sourcemap: "linked",
     plugins: [

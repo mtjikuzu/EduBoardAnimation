@@ -7,7 +7,7 @@ Ship an invite-only, US-paid B2C beta for 50–100 adult English-speaking educat
 ## Fixed decisions
 
 - **Hosting:** TanStack Start web/API on ECS Fargate; separate Fargate render workers; RDS PostgreSQL, S3, Redis, SQS, KMS/Secrets Manager, and OpenTelemetry.
-- **Generation:** OpenAI Structured Outputs for lesson/storyboard generation and ElevenLabs timestamped English TTS, both behind provider ports and Zod validation.
+- **Generation:** OpenAI Structured Outputs for lesson/storyboard generation and Kokoro TTS (MIT-licensed, local 82M-parameter model) for English narration, both behind provider ports and Zod validation.
 - **Rendering:** deterministic storyboard → SVG/HTML timeline → pinned Chromium frames → FFmpeg scene MP4/assembly. Rough.js, MathJax, curated assets; no freeform canvas or AI illustration generation.
 - **Commerce:** Clerk authentication, Polar Checkout/webhooks, and a first-party immutable render-credit ledger. Paid beta is US-only; global visitors may join the waitlist.
 - **Publishing:** creator-approved YouTube OAuth upload with the least-privilege upload scope, encrypted revocable refresh tokens, private default visibility, quota-aware worker, and processing reconciliation.

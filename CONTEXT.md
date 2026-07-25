@@ -17,7 +17,7 @@ A future school or other institutional workspace with its own branding, members,
 _Avoid_: tenant, school account
 
 **Open-source application**:
-The complete EduWhiteboard application and deployable infrastructure templates, released under MIT; it excludes only secrets, tenant data, and deployment-specific configuration.
+The complete EduWhiteboard application and deployable infrastructure templates, released under MIT; it excludes only secrets, tenant data, and deployment-specific configuration. All AI inference (Kokoro TTS, structured LLM output via OpenAI API) is behind replaceable provider ports.
 _Avoid_: open core, source-available edition
 
 **Creator**:
