@@ -109,12 +109,17 @@ router.post("/credits/approve-render", async (req: AuthenticatedRequest, res): P
     ? JSON.parse(storyboard.scenes)
     : (storyboard.scenes ?? {});
   // The planner output wraps scenes inside a top-level object
-  const scenes = Array.isArray(rawScenes) ? rawScenes : (Array.isArray((rawScenes as Record<string, unknown>).scenes) ? (rawScenes as Record<string, unknown>).scenes : []);
-  const totalElements = scenes.reduce(
-    (sum: number, s: { elements?: unknown[] }) => sum + (s.elements?.length ?? 0),
+  const scenesArr: unknown[] = Array.isArray(rawScenes)
+    ? rawScenes
+    : (Array.isArray((rawScenes as Record<string, unknown>).scenes)
+      ? ((rawScenes as Record<string, unknown>).scenes as unknown[])
+      : []);
+  const totalElements = scenesArr.reduce(
+    (sum: number, s: unknown) => sum + (((s as Record<string, unknown>).elements as unknown[])?.length ?? 0),
     0,
   );
-  const estimatedCost = estimateRenderCost(scenes.length, totalElements);
+  const scenes = scenesArr as Array<Record<string, unknown>>;
+  const estimatedCost = estimateRenderCost(scenes.length as number, totalElements as number);
 
   if (balance < estimatedCost) {
     res.status(402).json({
