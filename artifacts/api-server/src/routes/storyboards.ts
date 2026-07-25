@@ -170,19 +170,41 @@ router.get("/storyboards/:id", async (req: AuthenticatedRequest, res): Promise<v
     return;
   }
 
-  res.json({
-    ...storyboard,
-    scenes: typeof storyboard.scenes === "string"
-      ? JSON.parse(storyboard.scenes)
-      : storyboard.scenes,
-    safetyFlags: typeof storyboard.safetyFlags === "string"
-      ? JSON.parse(storyboard.safetyFlags as string)
-      : storyboard.safetyFlags,
-    validationErrors: typeof storyboard.validationErrors === "string"
-      ? JSON.parse(storyboard.validationErrors as string)
-      : storyboard.validationErrors,
-  });
+  const normalized: Record<string, unknown> = normalizeStoryboardResponse(storyboard as Record<string, unknown>);
+  normalized.safetyFlags = typeof storyboard.safetyFlags === "string"
+    ? JSON.parse(storyboard.safetyFlags as string)
+    : storyboard.safetyFlags;
+  normalized.validationErrors = typeof storyboard.validationErrors === "string"
+    ? JSON.parse(storyboard.validationErrors as string)
+    : storyboard.validationErrors;
+
+  res.json(normalized);
 });
+
+/**
+ * Normalize the DB scenes field: it stores the full Storyboard object
+ * (title, grade, scenes[]) but the API should return a flat scenes array.
+ * Also extracts storyboard-level metadata (title, grade, language).
+ */
+function normalizeStoryboardResponse(board: Record<string, unknown>) {
+  const rawScenes = typeof board.scenes === "string"
+    ? JSON.parse(board.scenes as string)
+    : (board.scenes ?? {});
+
+  const storyboardData = rawScenes as Record<string, unknown>;
+  const scenesArray = Array.isArray(storyboardData.scenes)
+    ? storyboardData.scenes
+    : [];
+
+  return {
+    ...board,
+    scenes: scenesArray,
+    storyboardTitle: storyboardData.title ?? null,
+    storyboardGrade: storyboardData.grade ?? null,
+    storyboardLanguage: storyboardData.language ?? null,
+    estimatedDuration: storyboardData.estimatedDuration ?? null,
+  };
+}
 
 /**
  * GET /storyboards?lessonId=:id
@@ -220,7 +242,7 @@ router.get("/storyboards", async (req: AuthenticatedRequest, res): Promise<void>
     .where(eq(storyboardsTable.lessonId, lessonId))
     .orderBy(desc(storyboardsTable.createdAt));
 
-  res.json(boards);
+  res.json(boards.map(normalizeStoryboardResponse));
 });
 
 /**
@@ -272,6 +294,16 @@ router.patch("/storyboards/:id/scenes", async (req: AuthenticatedRequest, res): 
     return;
   }
 
+  // Preserve the existing storyboard wrapper structure
+  const existingScenes = typeof existing.scenes === "string"
+    ? JSON.parse(existing.scenes)
+    : (existing.scenes ?? {});
+  const storyboardWrapper = Array.isArray(existingScenes)
+    ? { scenes: existingScenes }
+    : existingScenes;
+  // Update the scenes array inside the wrapper
+  storyboardWrapper.scenes = scenes;
+
   // Create new revision: insert a fresh row with incremented revision number
   const [updated] = await db
     .insert(storyboardsTable)
@@ -280,7 +312,7 @@ router.patch("/storyboards/:id/scenes", async (req: AuthenticatedRequest, res): 
       revision: existing.revision + 1,
       briefText: existing.briefText ?? "",
       status: "validated",
-      scenes: scenes,
+      scenes: storyboardWrapper,
       safetyFlags: existing.safetyFlags ?? [],
     })
     .returning();
@@ -344,11 +376,15 @@ router.patch("/storyboards/:id/reorder", async (req: AuthenticatedRequest, res):
     return;
   }
 
+  const rawCurrentScenes: Record<string, unknown> | Array<Record<string, unknown>> = 
+    typeof existing.scenes === "string" ? JSON.parse(existing.scenes) : (existing.scenes ?? {});
+  // Extract the scenes array (could be flat array or nested in storyboard object)
   const currentScenes: Array<{ id: number } & Record<string, unknown>> = 
-    typeof existing.scenes === "string" ? JSON.parse(existing.scenes) : existing.scenes;
+    Array.isArray(rawCurrentScenes) ? rawCurrentScenes : (rawCurrentScenes.scenes as any ?? []);
+  const storyboardWrapper = Array.isArray(rawCurrentScenes) ? { scenes: rawCurrentScenes } : rawCurrentScenes;
 
   // Build a map for quick lookup
-  const sceneMap = new Map<number, typeof currentScenes[number]>();
+  const sceneMap = new Map<number, Record<string, unknown>>();
   for (const s of currentScenes) {
     sceneMap.set(s.id, s);
   }
@@ -366,6 +402,9 @@ router.patch("/storyboards/:id/reorder", async (req: AuthenticatedRequest, res):
     return;
   }
 
+  // Preserve the wrapper structure
+  storyboardWrapper.scenes = reordered;
+
   // Create new revision with reordered scenes
   const [updated] = await db
     .insert(storyboardsTable)
@@ -374,7 +413,7 @@ router.patch("/storyboards/:id/reorder", async (req: AuthenticatedRequest, res):
       revision: existing.revision + 1,
       briefText: existing.briefText ?? "",
       status: "validated",
-      scenes: reordered,
+      scenes: storyboardWrapper,
       safetyFlags: existing.safetyFlags ?? [],
     })
     .returning();
