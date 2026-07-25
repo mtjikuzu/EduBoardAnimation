@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { useGetLesson, getGetLessonQueryKey } from '@workspace/api-client-react';
 import { ArrowLeft, ChevronDown, CheckCircle2, Circle, Send, Loader2, ChevronUp, Plus, FileText, Play } from 'lucide-react';
@@ -69,6 +69,12 @@ export default function Workspace() {
   const handleScenesUpdated = (updatedScenes: Scene[]) => {
     setScenes(updatedScenes);
   };
+
+  const handleExcalidrawChange = useCallback((sceneIndex: number, elements: any[]) => {
+    setScenes(prev => prev.map((s, i) =>
+      i === sceneIndex ? { ...s, elements } : s
+    ));
+  }, []);
 
   const totalElements = scenes.reduce(
     (sum, s) => sum + (s.elements?.length ?? 0),
@@ -257,11 +263,7 @@ export default function Workspace() {
                   scenes={scenes}
                   initialSceneIndex={0}
                   readOnly={false}
-                  onSceneChange={(sceneIndex, elements) => {
-                    setScenes(prev => prev.map((s, i) =>
-                      i === sceneIndex ? { ...s, elements } : s
-                    ));
-                  }}
+                  onSceneChange={handleExcalidrawChange}
                   height="100%"
                 />
               </div>

@@ -136,6 +136,7 @@ export default function ExcalidrawCanvas({
   const [sceneListOpen, setSceneListOpen] = useState(false);
   const [ExcalidrawComponent, setExcalidrawComponent] = useState<any>(null);
   const excRef = useRef<any>(null);
+  const lastHashRef = useRef<string>("");
 
   // Clamp scene index
   const safeIndex = Math.min(activeSceneIndex, Math.max(0, scenes.length - 1));
@@ -156,9 +157,18 @@ export default function ExcalidrawCanvas({
 
   const handleChange = useCallback(
     (elements: any[], _state: any) => {
-      if (onSceneChange && elements.length > 0) {
-        onSceneChange(safeIndex, excalidrawToSceneElements(elements));
-      }
+      if (!onSceneChange || elements.length === 0) return;
+
+      // Hash the elements to detect actual user edits vs prop re-renders
+      const hash = elements
+        .slice(0, 5)
+        .map((e: any) => `${e.type}:${Math.round(e.x || 0)}:${Math.round(e.y || 0)}:${(e.text || "").slice(0, 10)}`)
+        .join("|");
+
+      if (hash === lastHashRef.current) return;
+      lastHashRef.current = hash;
+
+      onSceneChange(safeIndex, excalidrawToSceneElements(elements));
     },
     [onSceneChange, safeIndex],
   );
