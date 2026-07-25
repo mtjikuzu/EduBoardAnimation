@@ -4,6 +4,7 @@ import { useGetLesson, getGetLessonQueryKey } from '@workspace/api-client-react'
 import { ArrowLeft, ChevronDown, CheckCircle2, Circle, Send, Loader2, ChevronUp, Plus, FileText, Play } from 'lucide-react';
 import BriefInput from '@/components/BriefInput';
 import StoryboardViewer from '@/components/StoryboardViewer';
+import ExcalidrawCanvas from '@/components/ExcalidrawCanvas';
 import { generateStoryboard, getStoryboardsByLesson } from '@/lib/api';
 import type { StoryboardResult, Scene, SafetyFlag, ApproveRenderResult } from '@/lib/api';
 import CreditBalance from '@/components/CreditBalance';
@@ -250,19 +251,12 @@ export default function Workspace() {
                 </div>
               </div>
             ) : (
-              <div className="flex-1 bg-card rounded-2xl shadow-sm border border-border overflow-hidden flex items-center justify-center relative p-8">
-                <svg viewBox="0 0 400 300" className="w-full h-full max-w-lg opacity-40" style={{ strokeLinecap: 'round', strokeLinejoin: 'round' }}>
-                  <path d="M50 250 L350 250 L340 100 L60 100 Z" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                  <path d="M40 100 L360 100 L380 140 L20 140 Z" fill="none" stroke="currentColor" strokeWidth="3" className="text-secondary"/>
-                  <path d="M60 140 L60 160 M120 140 L120 160 M180 140 L180 160 M240 140 L240 160 M300 140 L300 160 M340 140 L340 160" stroke="currentColor" strokeWidth="3" className="text-secondary"/>
-                  <path d="M160 250 L160 170 L240 170 L240 250" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                  <circle cx="230" cy="210" r="3" fill="currentColor" className="text-foreground"/>
-                  <rect x="70" y="170" width="70" height="60" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                  <rect x="260" y="170" width="70" height="60" fill="none" stroke="currentColor" strokeWidth="3" className="text-foreground"/>
-                  <path d="M105 170 L105 230 M70 200 L140 200" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
-                  <path d="M295 170 L295 230 M260 200 L330 200" stroke="currentColor" strokeWidth="2" strokeDasharray="4 4" className="text-foreground"/>
-                  <text x="200" y="80" textAnchor="middle" className="font-serif font-bold text-2xl fill-current text-foreground">SCENE PREVIEW</text>
-                </svg>
+              <div className="flex-1" style={{ height: '500px' }}>
+                <ExcalidrawCanvas
+                  initialElements={scenes.length > 0 ? scenes[0]?.elements ?? [] : []}
+                  readOnly={false}
+                  height="100%"
+                />
               </div>
             )}
           </div>

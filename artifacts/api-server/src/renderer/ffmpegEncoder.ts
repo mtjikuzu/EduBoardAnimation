@@ -26,7 +26,7 @@ export const FIXED_MEDIA_CONTRACT: MediaContract = {
   width: 1920,
   height: 1080,
   fps: 30,
-  videoCodec: "libx264",
+  videoCodec: "libopenh264",
   audioCodec: "aac",
   pixelFormat: "yuv420p",
   crf: 23,
@@ -74,8 +74,8 @@ export function encodeScene(
   args.push(
     "-c:v", contract.videoCodec,
     "-pix_fmt", contract.pixelFormat,
-    "-crf", String(contract.crf),
-    "-preset", "medium",
+    // OpenH264 uses -b:v for bitrate instead of -crf; SVT-AV1 uses -crf
+    ...(contract.videoCodec === "libopenh264" ? ["-b:v", "2M"] : ["-crf", String(contract.crf)]),
     "-r", String(contract.fps),
     "-vf", `scale=${contract.width}:${contract.height}:force_original_aspect_ratio=decrease,pad=${contract.width}:${contract.height}:(ow-iw)/2:(oh-ih)/2`,
     outputPath,
