@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# TypeUI design resources
+.typeui-skills/
+.typeui-prompts/
