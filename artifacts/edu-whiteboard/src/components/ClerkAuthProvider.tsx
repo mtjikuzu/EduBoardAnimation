@@ -1,4 +1,5 @@
 import React, { type ReactNode } from "react";
+import { AuthProvider } from "./AuthProvider";
 
 interface ClerkAuthProviderProps {
   children: ReactNode;
@@ -14,17 +15,8 @@ export function ClerkAuthProvider({ children }: ClerkAuthProviderProps) {
     return <ClerkProdProvider clerkKey={clerkKey} children={children} />;
   }
 
-  // Dev mode fallback
-  const [DevProvider, setDevProvider] = React.useState<any>(null);
-  React.useEffect(() => {
-    import("./AuthProvider").then((m) => setDevProvider(() => m.AuthProvider));
-  }, []);
-
-  if (!DevProvider) {
-    return <>{children}</>;
-  }
-
-  return React.createElement(DevProvider, null, children);
+  // Dev mode — use the dev AuthProvider directly
+  return React.createElement(AuthProvider, null, children);
 }
 
 function ClerkProdProvider({ clerkKey, children }: { clerkKey: string; children: ReactNode }) {
