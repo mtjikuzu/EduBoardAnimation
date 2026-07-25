@@ -8,6 +8,7 @@ import {
 import { getStoryboardsByLesson, generateStoryboard, getCreditBalance } from '@/lib/api';
 import type { StoryboardResult } from '@/lib/api';
 import { renderPreview, renderExport, getRenderJob } from '@/lib/api';
+import RenderProgress from '@/components/RenderProgress';
 import { connectYouTube, uploadToYouTube } from '@/lib/api';
 
 export default function ExportPage() {
@@ -37,27 +38,32 @@ export default function ExportPage() {
     }).catch(() => {});
   }, [id]);
 
+  const [dbJobId, setDbJobId] = useState<number | null>(null);
+
   const handleExport = async () => {
     if (!storyboard) return;
     setExporting(true);
     setError(null);
     setProgress(0);
+    setDbJobId(null);
     try {
-      // Simulate progress
-      const interval = setInterval(() => {
-        setProgress((p) => Math.min(p + 5, 90));
-      }, 500);
-
       const result = await renderExport({ storyboardId: storyboard.id });
-      clearInterval(interval);
-      setProgress(100);
-      setExportDone(true);
+      setDbJobId(result.jobId);
       setDownloadUrl(`/api/renderer/output/${result.jobId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Export failed');
     } finally {
       setExporting(false);
     }
+  };
+
+  const handleRenderComplete = () => {
+    setExportDone(true);
+    setProgress(100);
+  };
+
+  const handleRenderError = (error: string) => {
+    setError(error);
   };
 
   const handleConnectYouTube = async () => {
@@ -156,12 +162,20 @@ export default function ExportPage() {
             </div>
           )}
 
-          {exporting && (
-            <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-secondary rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
+          {dbJobId && !exportDone && (
+            <div className="mt-2">
+              <RenderProgress
+                dbJobId={dbJobId}
+                onComplete={handleRenderComplete}
+                onError={handleRenderError}
+                compact={false}
               />
+            </div>
+          )}
+          {exporting && !dbJobId && (
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Queuing render job...
             </div>
           )}
         </div>

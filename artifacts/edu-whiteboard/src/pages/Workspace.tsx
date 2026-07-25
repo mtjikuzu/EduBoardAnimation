@@ -9,6 +9,7 @@ import { generateStoryboard, getStoryboardsByLesson } from '@/lib/api';
 import type { StoryboardResult, Scene, SafetyFlag, ApproveRenderResult } from '@/lib/api';
 import CreditBalance from '@/components/CreditBalance';
 import ApproveRenderDialog from '@/components/ApproveRender';
+import AgentInput from '@/components/AgentInput';
 
 const Logo = () => (
   <div className="flex items-center gap-2">
@@ -253,8 +254,14 @@ export default function Workspace() {
             ) : (
               <div className="flex-1" style={{ height: '500px' }}>
                 <ExcalidrawCanvas
-                  initialElements={scenes.length > 0 ? scenes[0]?.elements ?? [] : []}
+                  scenes={scenes}
+                  initialSceneIndex={0}
                   readOnly={false}
+                  onSceneChange={(sceneIndex, elements) => {
+                    setScenes(prev => prev.map((s, i) =>
+                      i === sceneIndex ? { ...s, elements } : s
+                    ));
+                  }}
                   height="100%"
                 />
               </div>
@@ -295,20 +302,13 @@ export default function Workspace() {
             )}
           </div>
           
-          {scenes.length > 0 && (
-            <div className="p-4 border-t border-border">
-              <div className="relative">
-                <input 
-                  type="text" 
-                  placeholder="Ask AI agent..." 
-                  className="w-full pl-4 pr-10 py-3 bg-background border border-border rounded-xl text-sm focus:outline-none focus:border-secondary transition-colors placeholder:text-muted-foreground text-foreground shadow-sm"
-                  data-testid="input-ask-ai"
-                />
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-secondary hover:bg-muted rounded-lg transition-colors" data-testid="button-send-ai">
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+          {scenes.length > 0 && storyboard && (
+            <AgentInput
+              storyboardId={storyboard.id}
+              onRevised={(result) => {
+                setScenes(result.updatedScenes);
+              }}
+            />
           )}
         </div>
       </main>

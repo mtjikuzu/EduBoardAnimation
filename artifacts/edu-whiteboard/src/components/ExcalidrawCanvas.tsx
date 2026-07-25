@@ -9,15 +9,32 @@
  * for rendering, and vice versa.
  */
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { Loader2, Maximize2, Minimize2 } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, ChevronDown, ChevronUp } from "lucide-react";
 
 // Dynamic import since Excalidraw is large
 let ExcalidrawLib: any = null;
 
+export interface SceneMeta {
+  id?: string | number;
+  order: number;
+  title: string;
+  narration?: string;
+  durationSec?: number;
+  elements: Array<{
+    type: string;
+    content: string;
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+  }>;
+}
+
 interface ExcalidrawCanvasProps {
-  initialElements?: ExcalidrawElement[];
+  scenes?: SceneMeta[];
+  initialSceneIndex?: number;
   readOnly?: boolean;
-  onSceneChange?: (elements: ExcalidrawElement[]) => void;
+  onSceneChange?: (sceneIndex: number, elements: ExcalidrawElement[]) => void;
   height?: string;
 }
 
@@ -107,15 +124,22 @@ export function excalidrawToSceneElements(
 }
 
 export default function ExcalidrawCanvas({
-  initialElements = [],
+  scenes = [],
+  initialSceneIndex = 0,
   readOnly = false,
   onSceneChange,
   height = "100%",
 }: ExcalidrawCanvasProps) {
   const [loading, setLoading] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
+  const [activeSceneIndex, setActiveSceneIndex] = useState(initialSceneIndex);
+  const [sceneListOpen, setSceneListOpen] = useState(false);
   const [ExcalidrawComponent, setExcalidrawComponent] = useState<any>(null);
   const excRef = useRef<any>(null);
+
+  // Clamp scene index
+  const safeIndex = Math.min(activeSceneIndex, Math.max(0, scenes.length - 1));
+  const activeScene = scenes[safeIndex];
 
   useEffect(() => {
     import("@excalidraw/excalidraw").then((mod) => {
@@ -125,13 +149,18 @@ export default function ExcalidrawCanvas({
     });
   }, []);
 
+  const handleSceneSelect = useCallback((idx: number) => {
+    setActiveSceneIndex(idx);
+    setSceneListOpen(false);
+  }, []);
+
   const handleChange = useCallback(
     (elements: any[], _state: any) => {
       if (onSceneChange && elements.length > 0) {
-        onSceneChange(excalidrawToSceneElements(elements));
+        onSceneChange(safeIndex, excalidrawToSceneElements(elements));
       }
     },
-    [onSceneChange],
+    [onSceneChange, safeIndex],
   );
 
   if (loading) {
@@ -148,7 +177,7 @@ export default function ExcalidrawCanvas({
   if (!ExcalidrawComponent) return null;
 
   const excInitialData = {
-    elements: sceneElementsToExcalidraw(initialElements),
+    elements: activeScene ? sceneElementsToExcalidraw(activeScene.elements) : [],
     appState: { viewBackgroundColor: "#faf8f5" },
   };
 
@@ -160,6 +189,51 @@ export default function ExcalidrawCanvas({
       style={{ height: fullscreen ? "100vh" : height }}
       data-testid="excalidraw-canvas"
     >
+      {/* Scene selector bar */}
+      {scenes.length > 1 && (
+        <div className="absolute top-2 left-2 z-10">
+          <button
+            onClick={() => setSceneListOpen(!sceneListOpen)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 rounded-md shadow-sm text-xs font-medium hover:bg-white transition-colors"
+          >
+            Scene {safeIndex + 1}: {activeScene?.title?.slice(0, 24) ?? "Untitled"}
+            {sceneListOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
+          {sceneListOpen && (
+            <div className="absolute top-full left-0 mt-1 w-56 bg-white rounded-md shadow-lg border border-border max-h-48 overflow-y-auto">
+              {scenes.map((scene, idx) => (
+                <button
+                  key={scene.id ?? idx}
+                  onClick={() => handleSceneSelect(idx)}
+                  className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${
+                    idx === safeIndex ? "bg-muted font-medium" : ""
+                  }`}
+                >
+                  <span className="text-muted-foreground">Scene {scene.order}: </span>
+                  {scene.title?.slice(0, 28)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Fullscreen toggle */}
+      <button
+        onClick={() => setFullscreen(!fullscreen)}
+        className="absolute top-2 right-2 z-10 p-1.5 bg-white/80 rounded-md shadow-sm hover:bg-white transition-colors"
+        data-testid="toggle-fullscreen"
+      >
+        {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+      </button>
+
+      {/* Scene narration tooltip */}
+      {activeScene?.narration && (
+        <div className="absolute bottom-2 left-2 right-2 z-10 px-3 py-1.5 bg-white/90 rounded-md shadow-sm text-xs text-muted-foreground truncate">
+          🎙️ {activeScene.narration.slice(0, 120)}{activeScene.narration.length > 120 ? "..." : ""}
+        </div>
+      )}
+
       <ExcalidrawComponent
         ref={excRef}
         initialData={excInitialData}
@@ -169,13 +243,6 @@ export default function ExcalidrawCanvas({
         gridModeEnabled={false}
         theme="light"
       />
-      <button
-        onClick={() => setFullscreen(!fullscreen)}
-        className="absolute top-2 right-2 z-10 p-1.5 bg-white/80 rounded-md shadow-sm hover:bg-white transition-colors"
-        data-testid="toggle-fullscreen"
-      >
-        {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-      </button>
     </div>
   );
 }

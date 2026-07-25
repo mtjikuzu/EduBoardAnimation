@@ -13,6 +13,8 @@
 import { Queue, Worker, type Job } from "bullmq";
 import { Redis } from "ioredis";
 import { EventEmitter } from "node:events";
+import { eq } from "drizzle-orm";
+import { db, renderJobsTable } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { processRenderJob } from "../renderer/sceneRenderer";
 
@@ -21,12 +23,17 @@ export const renderEvents = new EventEmitter();
 renderEvents.setMaxListeners(200);
 
 const REDIS_URL = process.env["REDIS_URL"] ?? "redis://localhost:6379";
+const REDIS_PASSWORD = process.env["REDIS_PASSWORD"] ?? "";
 
 let connection: Redis | null = null;
 
 function getConnection(): Redis {
   if (!connection) {
-    connection = new Redis(REDIS_URL, {
+    const url = new URL(REDIS_URL);
+    if (REDIS_PASSWORD && !url.password) {
+      url.password = REDIS_PASSWORD;
+    }
+    connection = new Redis(url.toString(), {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
     });
@@ -52,21 +59,28 @@ export function getRenderQueue(): Queue {
 }
 
 /**
- * Enqueue a render job and return the job id.
- * The worker will process it asynchronously and emit SSE events.
+ * Enqueue a render job and return the queue job id.
+ * The worker receives the DB job ID so it can process it correctly.
  */
 export async function enqueueRender(
   jobType: "scene_preview" | "full_export" | "scene_regen",
   storyboardId: number,
   creatorId: number,
+  dbJobId: number,
   sceneIndex?: number,
 ): Promise<string> {
   const queue = getRenderQueue();
   const job = await queue.add(
     jobType,
-    { storyboardId, creatorId, sceneIndex, jobType },
     {
-      jobId: `${jobType}-${storyboardId}-${sceneIndex ?? "all"}-${Date.now()}`,
+      jobType,
+      storyboardId,
+      creatorId,
+      dbJobId,
+      sceneIndex,
+    },
+    {
+      jobId: `eduwb-${dbJobId}-${Date.now()}`,
     },
   );
   return job.id ?? "";
@@ -81,28 +95,32 @@ export function startRenderWorker(): void {
   const worker = new Worker(
     "eduwb-render",
     async (job: Job) => {
-      const { storyboardId, creatorId, sceneIndex, jobType } = job.data;
+      const { storyboardId, creatorId, dbJobId, sceneIndex, jobType } = job.data as {
+        storyboardId: number;
+        creatorId: number;
+        dbJobId: number;
+        sceneIndex?: number;
+        jobType: string;
+      };
 
-      logger.info({ jobId: job.id, jobType, storyboardId }, "Worker processing render job");
+      logger.info({ queueJobId: job.id, dbJobId, jobType, storyboardId }, "Worker processing render job");
 
       // Emit initial progress
       renderEvents.emit(`progress:${job.id}`, { status: "rendering", progress: 0 });
+      // Also emit by dbJobId for simpler frontend lookups
+      renderEvents.emit(`progress:db:${dbJobId}`, { status: "rendering", progress: 0 });
 
       try {
-        // Map our progress events
-        const origUpdate = async (status: string, progress: number) => {
-          await job.updateProgress(progress);
-          renderEvents.emit(`progress:${job.id}`, { status, progress });
-        };
-
-        // Process the render (uses the existing pipeline)
-        await processRenderJob(job.id as unknown as number);
+        // Process the render using the DB job ID (not the BullMQ string ID)
+        await processRenderJob(dbJobId);
 
         renderEvents.emit(`progress:${job.id}`, { status: "completed", progress: 100 });
-        logger.info({ jobId: job.id }, "Worker completed render job");
+        renderEvents.emit(`progress:db:${dbJobId}`, { status: "completed", progress: 100 });
+        logger.info({ queueJobId: job.id, dbJobId }, "Worker completed render job");
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         renderEvents.emit(`progress:${job.id}`, { status: "failed", progress: 0, error: message });
+        renderEvents.emit(`progress:db:${dbJobId}`, { status: "failed", progress: 0, error: message });
         throw err; // Let BullMQ handle retry
       }
     },
@@ -114,11 +132,11 @@ export function startRenderWorker(): void {
   );
 
   worker.on("failed", (job, err) => {
-    logger.error({ jobId: job?.id, err: err.message }, "Render job failed");
+    logger.error({ queueJobId: job?.id, err: err.message }, "Render job failed");
   });
 
   worker.on("completed", (job) => {
-    logger.info({ jobId: job.id }, "Render job completed");
+    logger.info({ queueJobId: job.id }, "Render job completed");
   });
 
   logger.info("Render worker started");
@@ -126,9 +144,13 @@ export function startRenderWorker(): void {
 
 /**
  * SSE endpoint handler — streams render job progress to the frontend.
+ * Supports both queueJobId (BullMQ) and dbJobId (render_jobs.id) lookups.
  */
 export function sseHandler(req: any, res: any): void {
   const jobId = req.query.jobId;
+  const dbJobId = req.query.dbJobId;
+
+  const eventKey = dbJobId ? `progress:db:${dbJobId}` : `progress:${jobId}`;
 
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -138,14 +160,13 @@ export function sseHandler(req: any, res: any): void {
   });
 
   // Send initial connection event
-  res.write(`data: ${JSON.stringify({ status: "connected", jobId })}\n\n`);
+  res.write(`data: ${JSON.stringify({ status: "connected", jobId: jobId ?? dbJobId })}\n\n`);
 
   const onProgress = (data: Record<string, unknown>) => {
     if (res.writableEnded) return;
     res.write(`data: ${JSON.stringify(data)}\n\n`);
   };
 
-  const eventKey = `progress:${jobId}`;
   renderEvents.on(eventKey, onProgress);
 
   // Keep alive

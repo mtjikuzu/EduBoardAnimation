@@ -8,6 +8,7 @@ import creditsRouter from "./credits";
 import renderRouter from "./render";
 import publishRouter from "./publish";
 import invitesRouter from "./invites";
+import agentRouter from "./agent";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(creditsRouter);
 router.use(renderRouter);
 router.use(publishRouter);
 router.use(invitesRouter);
+router.use(agentRouter);
 
 export default router;

@@ -120,6 +120,34 @@ export async function generateStoryboard(lessonId: number, brief: string): Promi
   });
 }
 
+export interface ReviseStoryboardResult {
+  revision: number;
+  id: number;
+  updatedScenes: Scene[];
+  changedSceneIds: number[];
+  explanation: string;
+  elementCount: number;
+}
+
+export async function reviseStoryboard(
+  storyboardId: number,
+  edit: string,
+): Promise<ReviseStoryboardResult> {
+  const res = await fetch(BASE + "/api/agent/revision", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify({ storyboardId, edit }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Revision failed" }));
+    throw new Error(err.error || "Revision failed");
+  }
+  return res.json() as Promise<ReviseStoryboardResult>;
+}
+
 export async function getStoryboard(id: number): Promise<StoryboardResult> {
   return request<StoryboardResult>(`/storyboards/${id}`);
 }
